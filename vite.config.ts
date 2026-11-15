@@ -5,6 +5,8 @@ import { VitePWA } from 'vite-plugin-pwa';
 // base './' → funktioniert unter https://<user>.github.io/<repo>/ unabhängig vom Repo-Namen
 export default defineConfig({
   base: './',
+  // Leaflet + Astronomy Engine; als PWA ohnehin offline zwischengespeichert
+  build: { chunkSizeWarningLimit: 800 },
   plugins: [
     react(),
     VitePWA({

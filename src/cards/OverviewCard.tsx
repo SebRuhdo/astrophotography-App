@@ -2,9 +2,11 @@ import { Card, LEVEL_TEXT, ScoreRing, Stat, fmtNum } from '../components/ui';
 import { Timeline } from '../components/Timeline';
 import { fmtDuration, fmtTime } from '../lib/time';
 import { intervalMs } from '../lib/astro';
+import { BestWindowBanner } from '../components/BestWindowBanner';
+import { ageText } from '../lib/weather';
 import type { CardProps } from './types';
 
-export function OverviewCard({ night, score, tz, weather, weatherError, weatherLoading, minAlt }: CardProps) {
+export function OverviewCard({ night, score, best, tz, weather, weatherError, weatherLoading, minAlt }: CardProps) {
   const s = night.sun;
   const mw = night.milkyWay;
   const darkLabel =
@@ -13,6 +15,12 @@ export function OverviewCard({ night, score, tz, weather, weatherError, weatherL
 
   return (
     <Card title="Nacht-Übersicht" icon="🌌" wide>
+      <BestWindowBanner bw={best} tz={tz} />
+      {weather?.stale && (
+        <div className="alert" style={{ marginTop: 0, marginBottom: 12 }}>
+          📴 Offline ({weather.staleReason}) – Wetterdaten vom Stand {ageText(weather.fetchedAt)}.
+        </div>
+      )}
       <div className="score-row">
         <ScoreRing score={score} />
         <div style={{ flex: 1, minWidth: 200 }}>

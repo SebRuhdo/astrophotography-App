@@ -36,7 +36,9 @@ export type DarkType = 'astronomisch' | 'nautisch' | 'bürgerlich' | 'keine';
 export interface Sample {
   t: Date;
   sunAlt: number;
+  sunAz: number;
   moonAlt: number;
+  moonAz: number;
   gcAlt: number;
   gcAz: number;
 }
@@ -222,7 +224,7 @@ function sampleNight(obs: A.Observer, t0: Date): Sample[] {
     const sun = altAz(A.Body.Sun, t, obs);
     const moon = altAz(A.Body.Moon, t, obs);
     const gc = altAz(A.Body.Star1, t, obs);
-    samples.push({ t, sunAlt: sun.alt, moonAlt: moon.alt, gcAlt: gc.alt, gcAz: gc.az });
+    samples.push({ t, sunAlt: sun.alt, sunAz: sun.az, moonAlt: moon.alt, moonAz: moon.az, gcAlt: gc.alt, gcAz: gc.az });
   }
   return samples;
 }
@@ -391,6 +393,37 @@ export function moonQuarters(start: Date, count: number): MoonQuarterEvent[] {
   for (let i = 0; i < count; i++) {
     out.push({ quarter: mq.quarter as MoonQuarterEvent['quarter'], time: mq.time.date });
     mq = A.NextMoonQuarter(mq);
+  }
+  return out;
+}
+
+export interface SkyObject {
+  id: 'sun' | 'moon' | 'gc' | string;
+  name: string;
+  alt: number;
+  az: number;
+  magnitude?: number;
+}
+
+/** Aktuelle Positionen von Sonne, Mond, Milchstraßen-Kern und Planeten (für den Kompass). */
+export function skyPositions(lat: number, lon: number, elevation: number, t: Date): SkyObject[] {
+  const obs = new A.Observer(lat, lon, elevation);
+  const out: SkyObject[] = [];
+  const sun = altAz(A.Body.Sun, t, obs);
+  out.push({ id: 'sun', name: 'Sonne', alt: sun.alt, az: sun.az });
+  const moon = altAz(A.Body.Moon, t, obs);
+  out.push({ id: 'moon', name: 'Mond', alt: moon.alt, az: moon.az });
+  const gc = altAz(A.Body.Star1, t, obs);
+  out.push({ id: 'gc', name: 'Milchstraßen-Kern', alt: gc.alt, az: gc.az });
+  for (const p of PLANETS) {
+    const h = altAz(p.body, t, obs);
+    let magnitude: number | undefined;
+    try {
+      magnitude = A.Illumination(p.body, t).mag;
+    } catch {
+      /* ignorieren */
+    }
+    out.push({ id: p.name, name: p.name, alt: h.alt, az: h.az, magnitude });
   }
   return out;
 }

@@ -3,6 +3,8 @@ import { Component, type ReactNode } from 'react';
 interface Props {
   title: string;
   children: ReactNode;
+  /** Ändert sich dieser Wert (z. B. Datum), wird ein Fehlerzustand zurückgesetzt */
+  resetKey?: string;
 }
 
 /** Fängt Fehler in einem Bereich ab, damit nicht die ganze App leer bleibt. */
@@ -11,6 +13,10 @@ export class ErrorBoundary extends Component<Props, { error: Error | null }> {
 
   static getDerivedStateFromError(error: Error) {
     return { error };
+  }
+
+  componentDidUpdate(prev: Props) {
+    if (this.state.error && prev.resetKey !== this.props.resetKey) this.setState({ error: null });
   }
 
   componentDidCatch(error: Error) {

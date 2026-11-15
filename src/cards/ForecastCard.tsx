@@ -1,5 +1,6 @@
 import { Card, ScoreChip, cloudStyle, fmtNum } from '../components/ui';
-import { fmtDateShort, fmtTime } from '../lib/time';
+import { BestWindowBanner } from '../components/BestWindowBanner';
+import { fmtDateShort } from '../lib/time';
 import type { CardProps } from './types';
 
 export function ForecastCard({ forecast, night, tz, selectDate }: CardProps) {
@@ -13,7 +14,7 @@ export function ForecastCard({ forecast, night, tz, selectDate }: CardProps) {
               <th>Score</th>
               <th>Wolken</th>
               <th>Mond</th>
-              <th>Dunkel</th>
+              <th>Bestes Fenster</th>
               <th>MS-Kern</th>
             </tr>
           </thead>
@@ -31,7 +32,9 @@ export function ForecastCard({ forecast, night, tz, selectDate }: CardProps) {
                 </td>
                 <td>{f.score.cloudAvg === null ? <span className="faint">–</span> : <span className="cell-bar" style={cloudStyle(f.score.cloudAvg)}>{fmtNum(f.score.cloudAvg, ' %')}</span>}</td>
                 <td>{Math.round(f.night.moon.illumination * 100)} %</td>
-                <td>{f.night.sun.dark ? `${fmtTime(f.night.sun.dark.start, tz)}–${fmtTime(f.night.sun.dark.end, tz)}` : '–'}</td>
+                <td>
+                  <BestWindowBanner bw={f.best} tz={tz} compact />
+                </td>
                 <td>{f.night.milkyWay.visible.length ? '✓' : '–'}</td>
               </tr>
             ))}
