@@ -12,6 +12,8 @@ import { OverviewCard } from './cards/OverviewCard';
 import { ForecastCard } from './cards/ForecastCard';
 import { SunCard } from './cards/SunCard';
 import { MoonCard } from './cards/MoonCard';
+import { MoonCalendarCard } from './cards/MoonCalendarCard';
+import { AuroraCard } from './cards/AuroraCard';
 import { MilkyWayCard } from './cards/MilkyWayCard';
 import { PlanetsCard } from './cards/PlanetsCard';
 import { WeatherCard } from './cards/WeatherCard';
@@ -22,7 +24,9 @@ const CARDS: Record<CardId, ComponentType<CardProps>> = {
   forecast: ForecastCard,
   sun: SunCard,
   moon: MoonCard,
+  mooncalendar: MoonCalendarCard,
   milkyway: MilkyWayCard,
+  aurora: AuroraCard,
   planets: PlanetsCard,
   weather: WeatherCard,
   lightpollution: LightPollutionCard,
@@ -236,7 +240,8 @@ export default function App() {
 
         <footer className="attrib">
           Wetter: <a href="https://open-meteo.com" target="_blank" rel="noreferrer">Open-Meteo</a> (CC BY 4.0) · Seeing:{' '}
-          <a href="https://www.7timer.info" target="_blank" rel="noreferrer">7Timer!</a> · Nachtlichter: NASA GIBS / VIIRS Black Marble · Karte: ©{' '}
+          <a href="https://www.7timer.info" target="_blank" rel="noreferrer">7Timer!</a> · Polarlicht:{' '}
+          <a href="https://www.swpc.noaa.gov" target="_blank" rel="noreferrer">NOAA SWPC</a> · Nachtlichter: NASA GIBS / VIIRS Black Marble · Karte: ©{' '}
           <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> · Astronomie:{' '}
           <a href="https://github.com/cosinekitty/astronomy" target="_blank" rel="noreferrer">Astronomy Engine</a>
         </footer>

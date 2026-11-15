@@ -1,13 +1,25 @@
 import { useCallback, useEffect, useState } from 'react';
 
-export type CardId = 'overview' | 'forecast' | 'sun' | 'moon' | 'milkyway' | 'planets' | 'weather' | 'lightpollution';
+export type CardId =
+  | 'overview'
+  | 'forecast'
+  | 'sun'
+  | 'moon'
+  | 'mooncalendar'
+  | 'milkyway'
+  | 'aurora'
+  | 'planets'
+  | 'weather'
+  | 'lightpollution';
 
 export const CARD_LABELS: Record<CardId, string> = {
   overview: 'Nacht-Übersicht & Zeitleiste',
   forecast: '7-Nächte-Vorschau',
   sun: 'Sonne & Dämmerung',
   moon: 'Mond',
+  mooncalendar: 'Mondkalender',
   milkyway: 'Milchstraße',
+  aurora: 'Polarlicht (Aurora)',
   planets: 'Planeten',
   weather: 'Wetter & Seeing',
   lightpollution: 'Karte & Lichtverschmutzung',
@@ -50,7 +62,14 @@ function load(): Settings {
     // neue Karten (spätere Versionen) ergänzen, unbekannte entfernen
     const known = new Set(Object.keys(CARD_LABELS));
     const cards = s.cards.filter((c) => known.has(c.id));
-    for (const id of Object.keys(CARD_LABELS) as CardId[]) if (!cards.some((c) => c.id === id)) cards.push({ id, visible: true });
+    // neue Karten an ihrer Standard-Position (hinter dem Vorgänger) einfügen
+    const order = Object.keys(CARD_LABELS) as CardId[];
+    order.forEach((id, i) => {
+      if (cards.some((c) => c.id === id)) return;
+      const prev = order.slice(0, i).reverse().find((p) => cards.some((c) => c.id === p));
+      const at = prev ? cards.findIndex((c) => c.id === prev) + 1 : 0;
+      cards.splice(at, 0, { id, visible: true });
+    });
     return { ...s, cards };
   } catch {
     return DEFAULT_SETTINGS;
