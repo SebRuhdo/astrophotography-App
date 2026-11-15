@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { describePlace, searchPlaces, type GeoResult } from '../lib/geocode';
+import { describePlace, searchPlaces, validElevation, type GeoResult } from '../lib/geocode';
 import { browserTz } from '../lib/time';
 import { newId, type Place } from '../lib/settings';
 
@@ -24,7 +24,7 @@ export function locateGps(): Promise<Place> {
           name: 'Aktueller Standort',
           lat: pos.coords.latitude,
           lon: pos.coords.longitude,
-          elevation: pos.coords.altitude ?? null,
+          elevation: validElevation(pos.coords.altitude),
           tz: browserTz(),
           source: 'gps',
         }),
@@ -108,7 +108,7 @@ export function PlaceDialog({ current, favorites, onSelect, onSaveFavorite, onRe
       name: name.trim() || `${la.toFixed(3)}°, ${lo.toFixed(3)}°`,
       lat: la,
       lon: lo,
-      elevation: el !== null && Number.isFinite(el) ? el : null,
+      elevation: validElevation(el),
       source: 'manual',
     });
   };
@@ -160,7 +160,7 @@ export function PlaceDialog({ current, favorites, onSelect, onSaveFavorite, onRe
                         name: r.name,
                         lat: r.latitude,
                         lon: r.longitude,
-                        elevation: r.elevation ?? null,
+                        elevation: validElevation(r.elevation),
                         tz: r.timezone,
                         source: 'search',
                       })
@@ -168,7 +168,7 @@ export function PlaceDialog({ current, favorites, onSelect, onSaveFavorite, onRe
                   >
                     <strong>{r.name}</strong>
                     <div className="small muted">
-                      {describePlace(r)} · {r.latitude.toFixed(3)}°, {r.longitude.toFixed(3)}°{r.elevation != null ? ` · ${Math.round(r.elevation)} m` : ''}
+                      {describePlace(r)} · {r.latitude.toFixed(3)}°, {r.longitude.toFixed(3)}°{validElevation(r.elevation) !== null ? ` · ${Math.round(r.elevation!)} m` : ''}
                     </div>
                   </button>
                 </li>
