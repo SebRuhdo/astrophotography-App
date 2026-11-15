@@ -18,6 +18,9 @@ export interface WeatherHour {
 
 export interface WeatherData {
   fetchedAt: number;
+  /** true = Netzwerk nicht erreichbar, es werden zwischengespeicherte Daten angezeigt */
+  stale?: boolean;
+  staleReason?: string;
   timezone: string;
   elevation: number;
   hours: WeatherHour[];
@@ -38,7 +41,8 @@ const BASE_VARS = [
 ];
 const JET_VAR = 'wind_speed_250hPa';
 
-const CACHE_MIN = 30;
+const CACHE_MIN = 30; // danach neu laden
+const STALE_MAX_H = 7 * 24; // ältere Daten auch offline nicht mehr anzeigen
 const cacheKey = (lat: number, lon: number) => `wx:${lat.toFixed(3)},${lon.toFixed(3)}`;
 
 function buildUrl(lat: number, lon: number, withJet: boolean): string {
@@ -81,20 +85,35 @@ function parse(raw: Raw): WeatherData {
   return { fetchedAt: Date.now(), timezone: raw.timezone, elevation: raw.elevation, hours };
 }
 
-export async function fetchWeather(lat: number, lon: number, signal?: AbortSignal): Promise<WeatherData> {
-  const key = cacheKey(lat, lon);
+function readCache(lat: number, lon: number): { fetchedAt: number; raw: Raw } | null {
   try {
-    const cached = localStorage.getItem(key);
-    if (cached) {
-      const c = JSON.parse(cached) as { fetchedAt: number; raw: Raw };
-      if (Date.now() - c.fetchedAt < CACHE_MIN * 60000) return { ...parse(c.raw), fetchedAt: c.fetchedAt };
-    }
+    const cached = localStorage.getItem(cacheKey(lat, lon));
+    return cached ? (JSON.parse(cached) as { fetchedAt: number; raw: Raw }) : null;
   } catch {
-    /* Cache optional */
+    return null;
   }
+}
 
-  let res = await fetch(buildUrl(lat, lon, true), { signal });
-  if (res.status === 400) res = await fetch(buildUrl(lat, lon, false), { signal }); // Fallback ohne Höhenwind
+export async function fetchWeather(lat: number, lon: number, signal?: AbortSignal): Promise<WeatherData> {
+  const cache = readCache(lat, lon);
+  const age = cache ? Date.now() - cache.fetchedAt : Infinity;
+  if (cache && age < CACHE_MIN * 60000) return { ...parse(cache.raw), fetchedAt: cache.fetchedAt };
+
+  const fallback = (reason: string): WeatherData => {
+    if (cache && age < STALE_MAX_H * 3600000) return { ...parse(cache.raw), fetchedAt: cache.fetchedAt, stale: true, staleReason: reason };
+    throw new Error(reason);
+  };
+
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) return fallback('Keine Internetverbindung');
+
+  let res: Response;
+  try {
+    res = await fetch(buildUrl(lat, lon, true), { signal });
+    if (res.status === 400) res = await fetch(buildUrl(lat, lon, false), { signal }); // Fallback ohne Höhenwind
+  } catch (e) {
+    if (signal?.aborted) throw e;
+    return fallback('Keine Verbindung zum Wetterdienst');
+  }
   if (!res.ok) {
     let reason = `HTTP ${res.status}`;
     try {
@@ -103,15 +122,24 @@ export async function fetchWeather(lat: number, lon: number, signal?: AbortSigna
     } catch {
       /* ignorieren */
     }
-    throw new Error(reason);
+    return fallback(reason);
   }
   const raw = (await res.json()) as Raw;
   try {
-    localStorage.setItem(key, JSON.stringify({ fetchedAt: Date.now(), raw }));
+    localStorage.setItem(cacheKey(lat, lon), JSON.stringify({ fetchedAt: Date.now(), raw }));
   } catch {
     /* Cache optional */
   }
   return parse(raw);
+}
+
+/** „vor 3 h“, „vor 25 min“ … */
+export function ageText(fetchedAt: number): string {
+  const min = Math.max(0, Math.round((Date.now() - fetchedAt) / 60000));
+  if (min < 60) return `vor ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 48) return `vor ${h} h`;
+  return `vor ${Math.round(h / 24)} Tagen`;
 }
 
 /** Stunden, deren Zeitstempel im Intervall liegt. */

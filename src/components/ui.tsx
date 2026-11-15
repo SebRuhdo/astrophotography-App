@@ -1,17 +1,37 @@
-import type { ReactNode } from 'react';
+import { createContext, useContext, type MouseEvent, type ReactNode } from 'react';
 import type { NightScore } from '../lib/score';
 
+/** Ein-/Ausklappen eines Bereichs (vom App-Container bereitgestellt) */
+export const CollapseContext = createContext<{ collapsed: boolean; toggle: () => void } | null>(null);
+
 export function Card({ title, icon, children, wide, actions }: { title: string; icon: string; children: ReactNode; wide?: boolean; actions?: ReactNode }) {
+  const c = useContext(CollapseContext);
+  const collapsed = c?.collapsed ?? false;
+  const onHeader = (e: MouseEvent) => {
+    if (!c || (e.target as HTMLElement).closest('button, a, input, select, label')) return;
+    c.toggle();
+  };
   return (
-    <section className={`card${wide ? ' wide' : ''}`}>
-      <h2>
+    <section className={`card${wide ? ' wide' : ''}${collapsed ? ' collapsed' : ''}`}>
+      <h2 onClick={onHeader} className={c ? 'collapsible' : undefined}>
         <span className="ico" aria-hidden>
           {icon}
         </span>
         <span style={{ flex: 1 }}>{title}</span>
         {actions}
+        {c && (
+          <button
+            className="btn ghost small collapse-btn"
+            onClick={c.toggle}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? `${title} aufklappen` : `${title} einklappen`}
+            title={collapsed ? 'Aufklappen' : 'Einklappen'}
+          >
+            {collapsed ? '▸' : '▾'}
+          </button>
+        )}
       </h2>
-      {children}
+      {!collapsed && children}
     </section>
   );
 }

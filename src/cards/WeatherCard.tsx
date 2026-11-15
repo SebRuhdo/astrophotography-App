@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Card, cloudStyle, fmtNum } from '../components/ui';
 import { fmtTime } from '../lib/time';
-import { jetClass, sevenTimerImageUrl } from '../lib/weather';
+import { ageText, jetClass, sevenTimerImageUrl } from '../lib/weather';
 import type { CardProps } from './types';
 
 const JET_COLOR = { gut: 'var(--good)', mittel: 'var(--mid)', schlecht: 'var(--bad)' } as const;
@@ -19,6 +19,11 @@ export function WeatherCard({ night, tz, weather, weatherError, weatherLoading, 
     <Card title="Wetter & Seeing" icon="☁️" wide>
       {weatherLoading && <p className="muted">Lade Wetterdaten …</p>}
       {weatherError && <div className="alert error">Wetterdaten konnten nicht geladen werden: {weatherError}</div>}
+      {weather && (
+        <p className="tiny faint" style={{ marginTop: 0 }}>
+          {weather.stale ? `📴 Offline – zwischengespeicherte Daten, ` : ''}Stand {ageText(weather.fetchedAt)}
+        </p>
+      )}
       {weather && hours.length === 0 && <div className="alert info">Für diese Nacht liegt noch keine stündliche Vorhersage vor (Open-Meteo: ca. 7 Tage).</div>}
       {hours.length > 0 && (
         <div className="table-wrap">

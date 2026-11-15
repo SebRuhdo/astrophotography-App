@@ -4,6 +4,7 @@ import { validElevation } from './geocode';
 export type CardId =
   | 'overview'
   | 'forecast'
+  | 'spots'
   | 'sun'
   | 'moon'
   | 'mooncalendar'
@@ -16,6 +17,7 @@ export type CardId =
 export const CARD_LABELS: Record<CardId, string> = {
   overview: 'Nacht-Übersicht & Zeitleiste',
   forecast: '7-Nächte-Vorschau',
+  spots: 'Spot-Vergleich (Lieblingsorte)',
   sun: 'Sonne & Dämmerung',
   moon: 'Mond',
   mooncalendar: 'Mondkalender',
@@ -23,7 +25,7 @@ export const CARD_LABELS: Record<CardId, string> = {
   aurora: 'Polarlicht (Aurora)',
   planets: 'Planeten',
   weather: 'Wetter & Seeing',
-  lightpollution: 'Karte & Lichtverschmutzung',
+  lightpollution: 'Karte, Richtungen & Lichtverschmutzung',
 };
 
 export interface Place {
@@ -43,6 +45,7 @@ export interface Settings {
   redMode: boolean;
   favorites: Place[];
   place: Place | null;
+  collapsed: CardId[]; // eingeklappte Bereiche
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -51,6 +54,7 @@ export const DEFAULT_SETTINGS: Settings = {
   redMode: false,
   favorites: [],
   place: null,
+  collapsed: [],
 };
 
 const KEY = 'astro-planer:settings:v1';
@@ -75,7 +79,8 @@ function load(): Settings {
     const fix = (p: Place | null): Place | null =>
       p && Number.isFinite(p.lat) && Number.isFinite(p.lon) ? { ...p, elevation: validElevation(p.elevation) } : null;
     const favorites = (Array.isArray(s.favorites) ? s.favorites : []).map(fix).filter((p): p is Place => p !== null);
-    return { ...s, cards, favorites, place: fix(s.place) };
+    const collapsed = (Array.isArray(s.collapsed) ? s.collapsed : []).filter((id) => known.has(id));
+    return { ...s, cards, favorites, collapsed, place: fix(s.place) };
   } catch {
     return DEFAULT_SETTINGS;
   }

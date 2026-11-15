@@ -1,17 +1,21 @@
-import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType, type TouchEvent } from 'react';
 import { createPortal } from 'react-dom';
 import { computeNight } from './lib/astro';
 import { scoreNight } from './lib/score';
+import { findBestWindow } from './lib/bestWindow';
 import { CARD_LABELS, useSettings, type CardId, type Place } from './lib/settings';
-import { addDaysIso, browserTz, currentNightIso, fmtDateLong, localNoon } from './lib/time';
+import { addDaysIso, browserTz, currentNightIso, fmtDateLong, fmtDateShort, localNoon } from './lib/time';
 import { fetchWeather, type WeatherData } from './lib/weather';
 import { validElevation } from './lib/geocode';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PlaceDialog, locateGps } from './components/PlaceDialog';
 import { SettingsDialog } from './components/SettingsDialog';
+import { CompassDialog } from './components/CompassDialog';
+import { CollapseContext } from './components/ui';
 import type { CardProps, ForecastNight } from './cards/types';
 import { OverviewCard } from './cards/OverviewCard';
 import { ForecastCard } from './cards/ForecastCard';
+import { SpotsCard } from './cards/SpotsCard';
 import { SunCard } from './cards/SunCard';
 import { MoonCard } from './cards/MoonCard';
 import { MoonCalendarCard } from './cards/MoonCalendarCard';
@@ -24,6 +28,7 @@ import { LightPollutionCard } from './cards/LightPollutionCard';
 const CARDS: Record<CardId, ComponentType<CardProps>> = {
   overview: OverviewCard,
   forecast: ForecastCard,
+  spots: SpotsCard,
   sun: SunCard,
   moon: MoonCard,
   mooncalendar: MoonCalendarCard,
@@ -39,7 +44,8 @@ export default function App() {
   const place = settings.place;
   const tz = place?.tz ?? browserTz();
   const [dateIso, setDateIso] = useState(() => currentNightIso(tz));
-  const [dialog, setDialog] = useState<'place' | 'settings' | null>(null);
+  const [dialog, setDialog] = useState<'place' | 'settings' | 'compass' | null>(null);
+  const [toast, setToast] = useState<{ text: string; key: number } | null>(null);
   const [weather, setWeather] = useState<WeatherData | null>(null);
   const [weatherError, setWeatherError] = useState<string | null>(null);
   const [weatherLoading, setWeatherLoading] = useState(false);
@@ -103,6 +109,7 @@ export default function App() {
     [place?.lat, place?.lon, elevation, dateIso, tz, minAlt], // eslint-disable-line react-hooks/exhaustive-deps
   );
   const score = useMemo(() => (night ? scoreNight(night, weather) : null), [night, weather]);
+  const best = useMemo(() => (night ? findBestWindow(night, weather, minAlt) : null), [night, weather, minAlt]);
 
   const forecast = useMemo<ForecastNight[]>(() => {
     if (!place) return [];
@@ -113,16 +120,51 @@ export default function App() {
         night && night.dateIso === iso
           ? night
           : computeNight(place.lat, place.lon, elevation, localNoon(iso, tz), iso, { minAltitude: minAlt, planets: false });
-      return { dateIso: iso, night: n, score: scoreNight(n, weather) };
+      return { dateIso: iso, night: n, score: scoreNight(n, weather), best: findBestWindow(n, weather, minAlt) };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [place?.lat, place?.lon, elevation, tz, minAlt, weather]);
 
-  const selectPlace = (p: Place) => {
-    update({ place: p });
-    setDialog(null);
-    setGpsError(null);
+  const selectPlace = useCallback(
+    (p: Place) => {
+      update({ place: p });
+      setDialog(null);
+      setGpsError(null);
+    },
+    [update],
+  );
+
+  const toggleCollapsed = useCallback(
+    (id: CardId) => update((s) => ({ collapsed: s.collapsed.includes(id) ? s.collapsed.filter((c) => c !== id) : [...s.collapsed, id] })),
+    [update],
+  );
+
+  // Wischen zwischen Nächten (nicht in Tabellen, Karte, Zeitleisten oder Eingaben)
+  const touch = useRef<{ x: number; y: number; t: number } | null>(null);
+  const onTouchStart = (e: TouchEvent) => {
+    const el = e.target as HTMLElement;
+    if (e.touches.length !== 1 || el.closest('.table-wrap, .timeline-wrap, .map, input, select, textarea, .dialog')) {
+      touch.current = null;
+      return;
+    }
+    touch.current = { x: e.touches[0].clientX, y: e.touches[0].clientY, t: Date.now() };
   };
+  const onTouchEnd = (e: TouchEvent) => {
+    const st = touch.current;
+    touch.current = null;
+    if (!st) return;
+    const dx = e.changedTouches[0].clientX - st.x;
+    const dy = e.changedTouches[0].clientY - st.y;
+    if (Math.abs(dx) < 70 || Math.abs(dy) > Math.abs(dx) * 0.5 || Date.now() - st.t > 800) return;
+    const next = addDaysIso(dateIso, dx < 0 ? 1 : -1);
+    setDateIso(next);
+    setToast({ text: `${dx < 0 ? '▶' : '◀'} Nacht vom ${fmtDateShort(next)}`, key: Date.now() });
+  };
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 1400);
+    return () => clearTimeout(id);
+  }, [toast]);
 
   const pickLocation = useCallback(
     (lat: number, lon: number) =>
@@ -147,6 +189,11 @@ export default function App() {
           <button className="btn place-btn" onClick={() => setDialog('place')} title="Standort wählen">
             📍 <span>{place ? place.name : 'Standort wählen'}</span>
           </button>
+          {place && (
+            <button className="btn" onClick={() => setDialog('compass')} title="Kompass" aria-label="Kompass öffnen">
+              🧭
+            </button>
+          )}
           <button
             className="btn"
             aria-pressed={settings.redMode}
@@ -161,7 +208,7 @@ export default function App() {
           </button>
         </header>
 
-        {!place || !night || !score ? (
+        {!place || !night || !score || !best ? (
           <div className="welcome">
             <h1>Willkommen beim Astro-Planer</h1>
             <p className="muted">
@@ -193,6 +240,9 @@ export default function App() {
                   {place.lat.toFixed(3)}°, {place.lon.toFixed(3)}°{place.elevation !== null ? ` · ${Math.round(place.elevation)} m` : ''} · Zeitzone {tz}
                   {place.bortle ? ` · Bortle ${place.bortle}` : ''}
                 </div>
+                <div className="tiny faint swipe-hint" style={{ fontWeight: 400 }}>
+                  ← wischen für andere Nächte →
+                </div>
               </h1>
               <button className="btn small" onClick={() => setDateIso(addDaysIso(dateIso, -1))} aria-label="Vorherige Nacht">
                 ◀
@@ -209,30 +259,35 @@ export default function App() {
             </div>
             {gpsError && <div className="alert error" style={{ marginBottom: 12 }}>{gpsError}</div>}
 
-            <main className="grid">
+            <main className="grid" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
               {settings.cards
                 .filter((c) => c.visible)
                 .map((c) => {
                   const C = CARDS[c.id];
                   return (
-                    <ErrorBoundary key={`${c.id}:${place.id}:${dateIso}`} title={CARD_LABELS[c.id]}>
-                    <C
-                      night={night}
-                      score={score}
-                      tz={tz}
-                      place={place}
-                      weather={weather}
-                      weatherError={weatherError}
-                      weatherLoading={weatherLoading}
-                      minAlt={minAlt}
-                      forecast={forecast}
-                      selectDate={(iso) => {
-                        setDateIso(iso);
-                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                      }}
-                      pickLocation={pickLocation}
-                      updatePlace={updatePlace}
-                    />
+                    <ErrorBoundary key={`${c.id}:${place.id}`} resetKey={dateIso} title={CARD_LABELS[c.id]}>
+                      <CollapseContext.Provider value={{ collapsed: settings.collapsed.includes(c.id), toggle: () => toggleCollapsed(c.id) }}>
+                        <C
+                          night={night}
+                          score={score}
+                          best={best}
+                          tz={tz}
+                          place={place}
+                          weather={weather}
+                          weatherError={weatherError}
+                          weatherLoading={weatherLoading}
+                          minAlt={minAlt}
+                          forecast={forecast}
+                          selectDate={(iso) => {
+                            setDateIso(iso);
+                            window.scrollTo({ top: 0, behavior: 'smooth' });
+                          }}
+                          pickLocation={pickLocation}
+                          updatePlace={updatePlace}
+                          favorites={settings.favorites}
+                          selectPlace={selectPlace}
+                        />
+                      </CollapseContext.Provider>
                     </ErrorBoundary>
                   );
                 })}
@@ -261,6 +316,12 @@ export default function App() {
         />
       )}
       {dialog === 'settings' && <SettingsDialog settings={settings} update={update} onClose={() => setDialog(null)} />}
+      {dialog === 'compass' && place && <CompassDialog place={place} onClose={() => setDialog(null)} />}
+      {toast && (
+        <div className="toast" key={toast.key} role="status">
+          {toast.text}
+        </div>
+      )}
     </>
   );
 }
