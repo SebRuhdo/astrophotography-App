@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { validElevation } from './geocode';
 
 export type CardId =
   | 'overview'
@@ -70,7 +71,11 @@ function load(): Settings {
       const at = prev ? cards.findIndex((c) => c.id === prev) + 1 : 0;
       cards.splice(at, 0, { id, visible: true });
     });
-    return { ...s, cards };
+    // gespeicherte Orte bereinigen (z. B. Höhe −9999 aus früheren Versionen)
+    const fix = (p: Place | null): Place | null =>
+      p && Number.isFinite(p.lat) && Number.isFinite(p.lon) ? { ...p, elevation: validElevation(p.elevation) } : null;
+    const favorites = (Array.isArray(s.favorites) ? s.favorites : []).map(fix).filter((p): p is Place => p !== null);
+    return { ...s, cards, favorites, place: fix(s.place) };
   } catch {
     return DEFAULT_SETTINGS;
   }

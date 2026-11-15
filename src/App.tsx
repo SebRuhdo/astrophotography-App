@@ -2,9 +2,11 @@ import { useCallback, useEffect, useMemo, useState, type ComponentType } from 'r
 import { createPortal } from 'react-dom';
 import { computeNight } from './lib/astro';
 import { scoreNight } from './lib/score';
-import { useSettings, type CardId, type Place } from './lib/settings';
+import { CARD_LABELS, useSettings, type CardId, type Place } from './lib/settings';
 import { addDaysIso, browserTz, currentNightIso, fmtDateLong, localNoon } from './lib/time';
 import { fetchWeather, type WeatherData } from './lib/weather';
+import { validElevation } from './lib/geocode';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { PlaceDialog, locateGps } from './components/PlaceDialog';
 import { SettingsDialog } from './components/SettingsDialog';
 import type { CardProps, ForecastNight } from './cards/types';
@@ -80,7 +82,7 @@ export default function App() {
         setWeather(w);
         const patch: Partial<Place> = {};
         if (!place.tz && w.timezone) patch.tz = w.timezone;
-        if (place.elevation === null && Number.isFinite(w.elevation)) patch.elevation = w.elevation;
+        if (validElevation(place.elevation) === null && validElevation(w.elevation) !== null) patch.elevation = w.elevation;
         if (Object.keys(patch).length) updatePlace(patch);
       })
       .catch((e) => {
@@ -94,7 +96,7 @@ export default function App() {
   }, [place?.lat, place?.lon]);
 
   const minAlt = settings.minAltitude;
-  const elevation = place?.elevation ?? 0;
+  const elevation = validElevation(place?.elevation) ?? 0;
 
   const night = useMemo(
     () => (place ? computeNight(place.lat, place.lon, elevation, localNoon(dateIso, tz), dateIso, { minAltitude: minAlt }) : null),
@@ -213,8 +215,8 @@ export default function App() {
                 .map((c) => {
                   const C = CARDS[c.id];
                   return (
+                    <ErrorBoundary key={`${c.id}:${place.id}:${dateIso}`} title={CARD_LABELS[c.id]}>
                     <C
-                      key={c.id}
                       night={night}
                       score={score}
                       tz={tz}
@@ -231,6 +233,7 @@ export default function App() {
                       pickLocation={pickLocation}
                       updatePlace={updatePlace}
                     />
+                    </ErrorBoundary>
                   );
                 })}
               {settings.cards.every((c) => !c.visible) && <p className="muted">Alle Bereiche ausgeblendet – in den Einstellungen (⚙️) wieder einschalten.</p>}
