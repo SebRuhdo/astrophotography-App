@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { computeNight, moonPhaseName, compass } from './astro';
+import { computeNight, moonPhaseName, compass, moonQuarters } from './astro';
 import { localNoon, zonedParts, addDaysIso } from './time';
 
 const TZ = 'Europe/Berlin';
@@ -80,5 +80,15 @@ describe('Hilfsfunktionen', () => {
     expect(compass(180)).toBe('S');
     expect(compass(247)).toBe('WSW');
     expect(compass(350)).toBe('N');
+  });
+  it('Mondviertel folgen zyklisch im Abstand von ca. 7,4 Tagen', () => {
+    const q = moonQuarters(new Date('2026-11-15T00:00:00Z'), 12);
+    expect(q).toHaveLength(12);
+    for (let i = 1; i < q.length; i++) {
+      expect(q[i].quarter).toBe((q[i - 1].quarter + 1) % 4);
+      const days = (q[i].time.getTime() - q[i - 1].time.getTime()) / 86400000;
+      expect(days).toBeGreaterThan(6.5);
+      expect(days).toBeLessThan(8.5);
+    }
   });
 });

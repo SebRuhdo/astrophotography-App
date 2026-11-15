@@ -627,3 +627,48 @@ footer.attrib a {
     padding: 12px 12px 14px;
   }
 }
+
+/* ------------------------------------------------------------------ Mondkalender */
+table.moon-cal th,
+table.moon-cal td {
+  text-align: center;
+  position: static;
+  padding: 5px 3px;
+}
+table.moon-cal th {
+  white-space: normal;
+}
+table.moon-cal td.clickable-cell {
+  cursor: pointer;
+  border-radius: 8px;
+}
+table.moon-cal td.clickable-cell:hover {
+  background: var(--card-2);
+}
+table.moon-cal td.newmoon {
+  font-weight: 650;
+  color: var(--accent-2);
+}
+table.moon-cal td.selected {
+  background: #1c2a52;
+}
+
+/* ------------------------------------------------------------------ Aurora */
+.kp-chart {
+  width: 100%;
+  min-width: 600px;
+  height: auto;
+  display: block;
+}
+.kp-chart text {
+  fill: var(--muted);
+  font-size: 11px;
+}
+.ovation-img {
+  width: 100%;
+  max-width: 480px;
+  height: auto;
+  border-radius: 10px;
+  display: block;
+  background: #000;
+}

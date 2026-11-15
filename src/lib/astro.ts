@@ -376,3 +376,21 @@ export function nextMilkyWayNight(lat: number, lon: number, elevation: number, t
   }
   return null;
 }
+
+export interface MoonQuarterEvent {
+  quarter: 0 | 1 | 2 | 3; // 0 Neumond, 1 Erstes Viertel, 2 Vollmond, 3 Letztes Viertel
+  time: Date;
+}
+
+export const QUARTER_NAMES = ['Neumond', 'Erstes Viertel', 'Vollmond', 'Letztes Viertel'] as const;
+
+/** Die nächsten `count` Mondphasen (Viertel) ab `start`. */
+export function moonQuarters(start: Date, count: number): MoonQuarterEvent[] {
+  const out: MoonQuarterEvent[] = [];
+  let mq = A.SearchMoonQuarter(start);
+  for (let i = 0; i < count; i++) {
+    out.push({ quarter: mq.quarter as MoonQuarterEvent['quarter'], time: mq.time.date });
+    mq = A.NextMoonQuarter(mq);
+  }
+  return out;
+}
