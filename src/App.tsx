@@ -102,14 +102,15 @@ export default function App() {
   }, [place?.lat, place?.lon]);
 
   const minAlt = settings.minAltitude;
+  const rating = useMemo(() => ({ profile: settings.profile, thresholds: settings.thresholds }), [settings.profile, settings.thresholds]);
   const elevation = validElevation(place?.elevation) ?? 0;
 
   const night = useMemo(
     () => (place ? computeNight(place.lat, place.lon, elevation, localNoon(dateIso, tz), dateIso, { minAltitude: minAlt }) : null),
     [place?.lat, place?.lon, elevation, dateIso, tz, minAlt], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  const score = useMemo(() => (night ? scoreNight(night, weather) : null), [night, weather]);
-  const best = useMemo(() => (night ? findBestWindow(night, weather, minAlt) : null), [night, weather, minAlt]);
+  const score = useMemo(() => (night ? scoreNight(night, weather, rating) : null), [night, weather, rating]);
+  const best = useMemo(() => (night ? findBestWindow(night, weather, minAlt, rating) : null), [night, weather, minAlt, rating]);
 
   const forecast = useMemo<ForecastNight[]>(() => {
     if (!place) return [];
@@ -120,10 +121,10 @@ export default function App() {
         night && night.dateIso === iso
           ? night
           : computeNight(place.lat, place.lon, elevation, localNoon(iso, tz), iso, { minAltitude: minAlt, planets: false });
-      return { dateIso: iso, night: n, score: scoreNight(n, weather), best: findBestWindow(n, weather, minAlt) };
+      return { dateIso: iso, night: n, score: scoreNight(n, weather, rating), best: findBestWindow(n, weather, minAlt, rating) };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [place?.lat, place?.lon, elevation, tz, minAlt, weather]);
+  }, [place?.lat, place?.lon, elevation, tz, minAlt, weather, rating]);
 
   const selectPlace = useCallback(
     (p: Place) => {
@@ -286,6 +287,8 @@ export default function App() {
                           updatePlace={updatePlace}
                           favorites={settings.favorites}
                           selectPlace={selectPlace}
+                          rating={rating}
+                          setProfile={(profile) => update({ profile })}
                         />
                       </CollapseContext.Provider>
                     </ErrorBoundary>

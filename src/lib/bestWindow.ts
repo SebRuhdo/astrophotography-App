@@ -1,5 +1,6 @@
 import type { Interval, NightAstro, Sample } from './astro';
 import type { WeatherData, WeatherHour } from './weather';
+import { DEFAULT_RATING, hourQuality, type RatingOptions } from './rating';
 
 export interface BestWindow {
   level: 'gut' | 'mittel' | 'schlecht' | 'keine-dunkelheit';
@@ -11,8 +12,6 @@ export interface BestWindow {
   reason: string | null; // Begründung, wenn kein gutes Fenster
 }
 
-const GOOD = 0.7;
-const OK = 0.4;
 const MIN_MS = 30 * 60000;
 
 function nearestHour(hours: WeatherHour[], t: Date): WeatherHour | null {
@@ -53,10 +52,13 @@ const avgQ = (r: Q[]) => r.reduce((a, x) => a + x.q, 0) / r.length;
 
 /**
  * Sucht den längsten zusammenhängenden Zeitraum in der Dunkelphase mit guter Qualität.
- * Qualität je 5-min-Schritt = (1 − Bewölkung) × Mondfaktor, Mondfaktor = 1 − 0,7 × Beleuchtung (wenn Mond über Horizont).
- * „gut“ ab 0,7 (z. B. klar und mondfrei, oder ≤ 30 % Wolken), „mittel“ ab 0,4.
+ * Qualität je 5-min-Schritt = Stundenqualität (1 − Bewölkung [× Deep-Sky-Faktor]) × Mondfaktor,
+ * Mondfaktor = 1 − 0,7 × Beleuchtung (wenn Mond über Horizont).
+ * „gut“ ab 1 − Wolken-Grenze „gut“ (Standard 0,8), „mittel“ ab 1 − Wolken-Grenze „schlecht“ (Standard 0,4).
  */
-export function findBestWindow(night: NightAstro, weather: WeatherData | null, minAlt: number): BestWindow {
+export function findBestWindow(night: NightAstro, weather: WeatherData | null, minAlt: number, o: RatingOptions = DEFAULT_RATING): BestWindow {
+  const GOOD = 1 - o.thresholds.cloudGood / 100;
+  const OK = 1 - o.thresholds.cloudBad / 100;
   const dark = night.sun.dark;
   const empty: BestWindow = { level: 'keine-dunkelheit', interval: null, cloudAvg: null, moonUp: false, withWeather: false, mw: null, reason: null };
   if (!dark) return { ...empty, reason: 'In dieser Nacht wird es nicht dunkel.' };
@@ -69,7 +71,7 @@ export function findBestWindow(night: NightAstro, weather: WeatherData | null, m
       const h = hours.length ? nearestHour(hours, s.t) : null;
       const cloud = h ? h.cloud : null;
       const moonF = s.moonAlt > 0 ? 1 - 0.7 * ill : 1;
-      return { s, cloud, q: (cloud === null ? 1 : 1 - cloud / 100) * moonF };
+      return { s, cloud, q: (h ? hourQuality(h, o) : 1) * moonF };
     });
   const withWeather = qs.some((x) => x.cloud !== null);
 
@@ -86,7 +88,7 @@ export function findBestWindow(night: NightAstro, weather: WeatherData | null, m
     const cAvg = clouds.length ? clouds.reduce((a, b) => a + b, 0) / clouds.length : null;
     const moonAllNight = qs.every((x) => x.s.moonAlt > 0);
     const reason =
-      cAvg !== null && cAvg >= 60
+      cAvg !== null && cAvg >= o.thresholds.cloudBad
         ? `Die ganze Nacht stark bewölkt (Ø ${Math.round(cAvg)} %).`
         : moonAllNight && ill > 0.5
           ? `Heller Mond (${Math.round(ill * 100)} %) die ganze Nacht über dem Horizont.`

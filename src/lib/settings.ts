@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { validElevation } from './geocode';
+import { DEFAULT_THRESHOLDS, type Profile, type Thresholds } from './rating';
 
 export type CardId =
   | 'overview'
@@ -46,6 +47,8 @@ export interface Settings {
   favorites: Place[];
   place: Place | null;
   collapsed: CardId[]; // eingeklappte Bereiche
+  profile: Profile;
+  thresholds: Thresholds;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -55,6 +58,8 @@ export const DEFAULT_SETTINGS: Settings = {
   favorites: [],
   place: null,
   collapsed: [],
+  profile: 'landscape',
+  thresholds: DEFAULT_THRESHOLDS,
 };
 
 const KEY = 'astro-planer:settings:v1';
@@ -80,7 +85,9 @@ function load(): Settings {
       p && Number.isFinite(p.lat) && Number.isFinite(p.lon) ? { ...p, elevation: validElevation(p.elevation) } : null;
     const favorites = (Array.isArray(s.favorites) ? s.favorites : []).map(fix).filter((p): p is Place => p !== null);
     const collapsed = (Array.isArray(s.collapsed) ? s.collapsed : []).filter((id) => known.has(id));
-    return { ...s, cards, favorites, collapsed, place: fix(s.place) };
+    const thresholds = { ...DEFAULT_THRESHOLDS, ...(s.thresholds ?? {}) };
+    const profile: Profile = s.profile === 'deepsky' ? 'deepsky' : 'landscape';
+    return { ...s, cards, favorites, collapsed, thresholds, profile, place: fix(s.place) };
   } catch {
     return DEFAULT_SETTINGS;
   }

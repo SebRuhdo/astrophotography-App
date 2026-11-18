@@ -42,7 +42,7 @@ export function ForecastCard({ forecast, night, tz, selectDate }: CardProps) {
         </table>
       </div>
       <p className="tiny faint">
-        Score = 100 × (1 − Bewölkung) × (0,5 + 0,5 × Mondfaktor). Grün ≥ 70, Gelb ≥ 40, Rot &lt; 40. Wettervorhersage reicht ca. 7 Tage.
+        Score = 100 × (1 − Bewölkung) × (0,5 + 0,5 × Mondfaktor), im Deep-Sky-Profil zusätzlich × Wind-/Jetstream-Faktor. Grün ≥ 70, Gelb ≥ 40, Rot &lt; 40. Wettervorhersage reicht ca. 7 Tage.
       </p>
     </Card>
   );

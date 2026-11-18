@@ -12,7 +12,7 @@ import type { CardProps } from './types';
 
 type WxState = { data: WeatherData | null; error: string | null; loading: boolean };
 
-export function SpotsCard({ place, favorites, night, minAlt, selectPlace }: CardProps) {
+export function SpotsCard({ place, favorites, night, minAlt, selectPlace, rating }: CardProps) {
   const spots = useMemo(() => {
     const list: Place[] = [...favorites];
     if (!list.some((f) => f.id === place.id)) list.unshift(place);
@@ -51,11 +51,11 @@ export function SpotsCard({ place, favorites, night, minAlt, selectPlace }: Card
             planets: false,
           });
           const w = wx[s.id];
-          return { s, tz, n, w, score: scoreNight(n, w?.data ?? null), best: findBestWindow(n, w?.data ?? null, minAlt) };
+          return { s, tz, n, w, score: scoreNight(n, w?.data ?? null, rating), best: findBestWindow(n, w?.data ?? null, minAlt, rating) };
         })
         .sort((a, b) => (b.score.score ?? -1) - (a.score.score ?? -1)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [key, night.dateIso, minAlt, wx],
+    [key, night.dateIso, minAlt, wx, rating],
   );
 
   return (

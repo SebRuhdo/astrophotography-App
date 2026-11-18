@@ -55,3 +55,16 @@ describe('findBestWindow', () => {
     expect(findBestWindow(n, null, 5).level).toBe('keine-dunkelheit');
   });
 });
+
+describe('findBestWindow – Profile', () => {
+  const iso2 = '2026-12-08';
+  const t02 = localNoon(iso2, TZ);
+  const n2 = computeNight(48.14, 11.58, 520, t02, iso2, { planets: false });
+  it('starker Jetstream verschlechtert nur im Deep-Sky-Profil', () => {
+    const w = weatherFor(t02, () => 0);
+    w.hours.forEach((h) => (h.jet = 200));
+    const base = { thresholds: { cloudGood: 20, cloudBad: 60, dewSpread: 2.5, windGood: 15, windBad: 30, jetGood: 70, jetBad: 130 } };
+    expect(findBestWindow(n2, w, 5, { ...base, profile: 'landscape' }).level).toBe('gut');
+    expect(findBestWindow(n2, w, 5, { ...base, profile: 'deepsky' }).level).toBe('mittel');
+  });
+});

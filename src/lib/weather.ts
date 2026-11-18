@@ -161,11 +161,3 @@ export function sevenTimerImageUrl(lat: number, lon: number): string {
   });
   return `https://www.7timer.info/bin/astro.php?${p}`;
 }
-
-/** Faustregel: starker Höhenwind (Jetstream) verschlechtert das Seeing. */
-export function jetClass(kmh: number | null): 'gut' | 'mittel' | 'schlecht' | null {
-  if (kmh === null || Number.isNaN(kmh)) return null;
-  if (kmh < 70) return 'gut';
-  if (kmh < 130) return 'mittel';
-  return 'schlecht';
-}

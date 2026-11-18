@@ -2,6 +2,7 @@ import type { NightAstro } from '../lib/astro';
 import type { NightScore } from '../lib/score';
 import type { BestWindow } from '../lib/bestWindow';
 import type { Place } from '../lib/settings';
+import type { Profile, RatingOptions } from '../lib/rating';
 import type { WeatherData } from '../lib/weather';
 
 export interface ForecastNight {
@@ -27,4 +28,6 @@ export interface CardProps {
   updatePlace: (patch: Partial<Place>) => void;
   favorites: Place[];
   selectPlace: (p: Place) => void;
+  rating: RatingOptions;
+  setProfile: (p: Profile) => void;
 }
