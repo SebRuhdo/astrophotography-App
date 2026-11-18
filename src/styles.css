@@ -816,3 +816,104 @@ table.moon-cal td.selected {
     display: block;
   }
 }
+
+/* ------------------------------------------------------------------ Wetter-Diagramm */
+.wx-chart {
+  display: block;
+  touch-action: pan-y;
+  user-select: none;
+  cursor: crosshair;
+}
+.wx-chart .wx-title {
+  fill: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+.wx-chart .wx-axis {
+  fill: var(--faint);
+  font-size: 11px;
+}
+.wx-readout {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  font-size: 0.875rem;
+  padding: 8px 10px;
+  margin-top: 4px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  font-variant-numeric: tabular-nums;
+}
+.wx-summary {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.wx-summary li {
+  border: 1px solid var(--c);
+  background: color-mix(in srgb, var(--c) 10%, transparent);
+  border-radius: 999px;
+  padding: 3px 12px;
+  font-size: 0.9rem;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  overflow: hidden;
+  font-size: 0.8rem;
+  font-weight: 500;
+}
+.seg button {
+  background: transparent;
+  border: 0;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.seg button[aria-pressed='true'] {
+  background: #2a4a9a;
+}
+.thresholds {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 0 10px;
+}
+
+/* ------------------------------------------------------------------ Horizont */
+.hz-chart {
+  display: block;
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+.hz-chart .wx-axis {
+  fill: var(--faint);
+  font-size: 11px;
+}
+.capture-live {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  text-align: center;
+  margin: 8px 0 12px;
+}
+.capture-live > div {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.capture-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.capture-btn {
+  width: 100%;
+  min-height: 52px;
+  font-size: 1.1rem;
+}

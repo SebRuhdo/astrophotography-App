@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { validElevation } from './geocode';
+import { DEFAULT_THRESHOLDS, type Profile, type Thresholds } from './rating';
+import { TERRAIN_DIRS, type HorizonProfile } from './horizon';
 
 export type CardId =
   | 'overview'
@@ -9,6 +11,7 @@ export type CardId =
   | 'moon'
   | 'mooncalendar'
   | 'milkyway'
+  | 'horizon'
   | 'aurora'
   | 'planets'
   | 'weather'
@@ -22,6 +25,7 @@ export const CARD_LABELS: Record<CardId, string> = {
   moon: 'Mond',
   mooncalendar: 'Mondkalender',
   milkyway: 'Milchstraße',
+  horizon: 'Horizont-Profil',
   aurora: 'Polarlicht (Aurora)',
   planets: 'Planeten',
   weather: 'Wetter & Seeing',
@@ -36,6 +40,7 @@ export interface Place {
   elevation: number | null; // null = noch unbekannt (wird aus Wetter-API ergänzt)
   tz?: string;
   bortle?: number | null; // manuell eingetragen (1–9)
+  horizon?: HorizonProfile; // Gelände + vor Ort erfasste Punkte
   source: 'gps' | 'search' | 'manual' | 'map';
 }
 
@@ -46,6 +51,8 @@ export interface Settings {
   favorites: Place[];
   place: Place | null;
   collapsed: CardId[]; // eingeklappte Bereiche
+  profile: Profile;
+  thresholds: Thresholds;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -55,6 +62,8 @@ export const DEFAULT_SETTINGS: Settings = {
   favorites: [],
   place: null,
   collapsed: [],
+  profile: 'landscape',
+  thresholds: DEFAULT_THRESHOLDS,
 };
 
 const KEY = 'astro-planer:settings:v1';
@@ -76,11 +85,19 @@ function load(): Settings {
       cards.splice(at, 0, { id, visible: true });
     });
     // gespeicherte Orte bereinigen (z. B. Höhe −9999 aus früheren Versionen)
+    const fixHorizon = (h: HorizonProfile | undefined): HorizonProfile | undefined => {
+      if (!h) return undefined;
+      const terrain = Array.isArray(h.terrain) && h.terrain.length === TERRAIN_DIRS && h.terrain.every(Number.isFinite) ? h.terrain : null;
+      const manual = Array.isArray(h.manual) ? h.manual.filter((m) => Number.isFinite(m?.az) && Number.isFinite(m?.alt)) : [];
+      return terrain || manual.length ? { ...h, terrain, manual } : undefined;
+    };
     const fix = (p: Place | null): Place | null =>
-      p && Number.isFinite(p.lat) && Number.isFinite(p.lon) ? { ...p, elevation: validElevation(p.elevation) } : null;
+      p && Number.isFinite(p.lat) && Number.isFinite(p.lon) ? { ...p, elevation: validElevation(p.elevation), horizon: fixHorizon(p.horizon) } : null;
     const favorites = (Array.isArray(s.favorites) ? s.favorites : []).map(fix).filter((p): p is Place => p !== null);
     const collapsed = (Array.isArray(s.collapsed) ? s.collapsed : []).filter((id) => known.has(id));
-    return { ...s, cards, favorites, collapsed, place: fix(s.place) };
+    const thresholds = { ...DEFAULT_THRESHOLDS, ...(s.thresholds ?? {}) };
+    const profile: Profile = s.profile === 'deepsky' ? 'deepsky' : 'landscape';
+    return { ...s, cards, favorites, collapsed, thresholds, profile, place: fix(s.place) };
   } catch {
     return DEFAULT_SETTINGS;
   }

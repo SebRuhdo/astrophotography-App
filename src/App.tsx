@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { computeNight } from './lib/astro';
 import { scoreNight } from './lib/score';
 import { findBestWindow } from './lib/bestWindow';
+import { makeHorizon } from './lib/horizon';
 import { CARD_LABELS, useSettings, type CardId, type Place } from './lib/settings';
 import { addDaysIso, browserTz, currentNightIso, fmtDateLong, fmtDateShort, localNoon } from './lib/time';
 import { fetchWeather, type WeatherData } from './lib/weather';
@@ -21,6 +22,7 @@ import { MoonCard } from './cards/MoonCard';
 import { MoonCalendarCard } from './cards/MoonCalendarCard';
 import { AuroraCard } from './cards/AuroraCard';
 import { MilkyWayCard } from './cards/MilkyWayCard';
+import { HorizonCard } from './cards/HorizonCard';
 import { PlanetsCard } from './cards/PlanetsCard';
 import { WeatherCard } from './cards/WeatherCard';
 import { LightPollutionCard } from './cards/LightPollutionCard';
@@ -33,6 +35,7 @@ const CARDS: Record<CardId, ComponentType<CardProps>> = {
   moon: MoonCard,
   mooncalendar: MoonCalendarCard,
   milkyway: MilkyWayCard,
+  horizon: HorizonCard,
   aurora: AuroraCard,
   planets: PlanetsCard,
   weather: WeatherCard,
@@ -102,14 +105,16 @@ export default function App() {
   }, [place?.lat, place?.lon]);
 
   const minAlt = settings.minAltitude;
+  const rating = useMemo(() => ({ profile: settings.profile, thresholds: settings.thresholds }), [settings.profile, settings.thresholds]);
   const elevation = validElevation(place?.elevation) ?? 0;
+  const horizon = useMemo(() => makeHorizon(place?.horizon), [place?.horizon]);
 
   const night = useMemo(
-    () => (place ? computeNight(place.lat, place.lon, elevation, localNoon(dateIso, tz), dateIso, { minAltitude: minAlt }) : null),
-    [place?.lat, place?.lon, elevation, dateIso, tz, minAlt], // eslint-disable-line react-hooks/exhaustive-deps
+    () => (place ? computeNight(place.lat, place.lon, elevation, localNoon(dateIso, tz), dateIso, { minAltitude: minAlt, horizon }) : null),
+    [place?.lat, place?.lon, elevation, dateIso, tz, minAlt, horizon], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  const score = useMemo(() => (night ? scoreNight(night, weather) : null), [night, weather]);
-  const best = useMemo(() => (night ? findBestWindow(night, weather, minAlt) : null), [night, weather, minAlt]);
+  const score = useMemo(() => (night ? scoreNight(night, weather, rating) : null), [night, weather, rating]);
+  const best = useMemo(() => (night ? findBestWindow(night, weather, minAlt, rating) : null), [night, weather, minAlt, rating]);
 
   const forecast = useMemo<ForecastNight[]>(() => {
     if (!place) return [];
@@ -119,11 +124,11 @@ export default function App() {
       const n =
         night && night.dateIso === iso
           ? night
-          : computeNight(place.lat, place.lon, elevation, localNoon(iso, tz), iso, { minAltitude: minAlt, planets: false });
-      return { dateIso: iso, night: n, score: scoreNight(n, weather), best: findBestWindow(n, weather, minAlt) };
+          : computeNight(place.lat, place.lon, elevation, localNoon(iso, tz), iso, { minAltitude: minAlt, planets: false, horizon });
+      return { dateIso: iso, night: n, score: scoreNight(n, weather, rating), best: findBestWindow(n, weather, minAlt, rating) };
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [place?.lat, place?.lon, elevation, tz, minAlt, weather]);
+  }, [place?.lat, place?.lon, elevation, tz, minAlt, weather, rating, horizon]);
 
   const selectPlace = useCallback(
     (p: Place) => {
@@ -286,6 +291,9 @@ export default function App() {
                           updatePlace={updatePlace}
                           favorites={settings.favorites}
                           selectPlace={selectPlace}
+                          rating={rating}
+                          horizon={horizon}
+                          setProfile={(profile) => update({ profile })}
                         />
                       </CollapseContext.Provider>
                     </ErrorBoundary>
@@ -300,7 +308,8 @@ export default function App() {
           Wetter: <a href="https://open-meteo.com" target="_blank" rel="noreferrer">Open-Meteo</a> (CC BY 4.0) · Seeing:{' '}
           <a href="https://www.7timer.info" target="_blank" rel="noreferrer">7Timer!</a> · Polarlicht:{' '}
           <a href="https://www.swpc.noaa.gov" target="_blank" rel="noreferrer">NOAA SWPC</a> · Nachtlichter: NASA GIBS / VIIRS Black Marble · Karte: ©{' '}
-          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> · Astronomie:{' '}
+          <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap</a> · Gelände: Copernicus DEM GLO-90 (Copernicus-Programm der EU/ESA) über
+          Open-Meteo · Astronomie:{' '}
           <a href="https://github.com/cosinekitty/astronomy" target="_blank" rel="noreferrer">Astronomy Engine</a>
         </footer>
       </div>

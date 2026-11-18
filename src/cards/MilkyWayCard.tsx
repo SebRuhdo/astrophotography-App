@@ -4,12 +4,12 @@ import { compass, intervalMs, nextMilkyWayNight } from '../lib/astro';
 import { fmtDuration, fmtTime, fmtTimeDay, zonedParts } from '../lib/time';
 import type { CardProps } from './types';
 
-export function MilkyWayCard({ night, tz, place, minAlt, selectDate }: CardProps) {
+export function MilkyWayCard({ night, tz, place, minAlt, selectDate, horizon }: CardProps) {
   const mw = night.milkyWay;
   const visible = mw.visible.length > 0;
   const next = useMemo(
-    () => (visible ? null : nextMilkyWayNight(place.lat, place.lon, place.elevation ?? 0, night.t0, minAlt)),
-    [visible, place.lat, place.lon, place.elevation, night.t0, minAlt],
+    () => (visible ? null : nextMilkyWayNight(place.lat, place.lon, place.elevation ?? 0, night.t0, minAlt, horizon)),
+    [visible, place.lat, place.lon, place.elevation, night.t0, minAlt, horizon],
   );
   const nextIso = next
     ? (() => {
@@ -44,7 +44,7 @@ export function MilkyWayCard({ night, tz, place, minAlt, selectDate }: CardProps
         </>
       ) : (
         <div className="alert info">
-          Der Kern der Milchstraße steht in dieser Nacht während der Dunkelheit nicht über {minAlt}° Höhe.
+          Der Kern der Milchstraße steht in dieser Nacht während der Dunkelheit nicht über {minAlt}° Höhe{horizon ? ' bzw. über dem Horizont-Profil' : ''}.
           {nextIso && (
             <>
               {' '}
@@ -66,7 +66,7 @@ export function MilkyWayCard({ night, tz, place, minAlt, selectDate }: CardProps
         <dd>{fmtDeg(mw.maxAlt24h, 1)}</dd>
       </dl>
       <p className="tiny faint">
-        Galaktisches Zentrum (Sgr A*, Schütze). Sichtbar = über {minAlt}° Mindesthöhe bei astronomischer Dunkelheit (Mindesthöhe in den Einstellungen änderbar).
+        Galaktisches Zentrum (Sgr A*, Schütze). Sichtbar = über {minAlt}° Mindesthöhe{horizon ? ' und über dem Horizont-Profil des Spots' : ''} bei astronomischer Dunkelheit.
       </p>
     </Card>
   );

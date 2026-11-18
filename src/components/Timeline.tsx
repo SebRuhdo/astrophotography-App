@@ -15,7 +15,7 @@ function skyColor(alt: number): string {
   return '#04060e';
 }
 
-export function Timeline({ night, weather, tz, minAlt }: { night: NightAstro; weather: WeatherData | null; tz: string; minAlt: number }) {
+export function Timeline({ night, weather, tz }: { night: NightAstro; weather: WeatherData | null; tz: string; minAlt?: number }) {
   // Zeitraum: 1 h vor Sonnenuntergang bis 1 h nach Sonnenaufgang (sonst 16–08 Uhr)
   const s = night.sun;
   const start = s.sunset ? s.sunset.getTime() - 3600000 : night.t0.getTime() + 4 * 3600000;
@@ -68,7 +68,7 @@ export function Timeline({ night, weather, tz, minAlt }: { night: NightAstro; we
         {/* Milchstraße */}
         <rect x={LABEL_W} y={y(2)} width={W - LABEL_W} height={ROW_H} fill="rgba(255,255,255,0.03)" />
         {samples
-          .filter((p) => p.gcAlt >= minAlt)
+          .filter((p) => p.gcVis)
           .map((p) => {
             const dark = s.dark && p.t >= s.dark.start && p.t <= s.dark.end;
             return (
@@ -115,7 +115,7 @@ export function Timeline({ night, weather, tz, minAlt }: { night: NightAstro; we
         <span><i style={{ background: '#2c4782' }} />Dämmerung</span>
         <span><i style={{ background: '#04060e', border: '1px solid #333' }} />astron. Nacht</span>
         <span><i style={{ background: 'var(--moon)' }} />Mond über Horizont</span>
-        <span><i style={{ background: 'var(--mw)' }} />MS-Kern über {minAlt}° (blass = hell/Mond)</span>
+        <span><i style={{ background: 'var(--mw)' }} />MS-Kern sichtbar (blass = hell/Mond)</span>
         <span><i style={{ background: '#c8d2eb' }} />Wolken (Balkenhöhe = %)</span>
         <span><i style={{ background: 'var(--bad)' }} />jetzt</span>
       </div>
