@@ -1,33 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useOrientation } from '../lib/useOrientation';
 import { compass, skyPositions, type SkyObject } from '../lib/astro';
 import type { Place } from '../lib/settings';
 import { validElevation } from '../lib/geocode';
-
-type SensorState = 'idle' | 'active' | 'unsupported' | 'denied' | 'no-data';
-
-interface OrientationEventWithCompass extends DeviceOrientationEvent {
-  webkitCompassHeading?: number;
-}
 
 const COLORS: Record<string, string> = { sun: '#ffb347', moon: '#e8e3c9', gc: '#b9a2ff' };
 const SIZE = 320;
 const C = SIZE / 2;
 const R = 130;
 
-/** Kreisförmige Glättung, damit die Anzeige nicht zittert. */
-function smoothAngle(prev: number | null, next: number, k = 0.25): number {
-  if (prev === null) return next;
-  const d = ((next - prev + 540) % 360) - 180;
-  return (prev + k * d + 360) % 360;
-}
-
 export function CompassDialog({ place, onClose }: { place: Place; onClose: () => void }) {
   const [now, setNow] = useState(() => new Date());
-  const [heading, setHeading] = useState<number | null>(null);
-  const [sensor, setSensor] = useState<SensorState>('idle');
+  const { heading, state: sensor, start: startSensor } = useOrientation();
   const [target, setTarget] = useState<string>('gc');
-  const headingRef = useRef<number | null>(null);
-  const cleanup = useRef<(() => void) | null>(null);
 
   // Positionen alle 10 s aktualisieren
   useEffect(() => {
@@ -38,47 +23,8 @@ export function CompassDialog({ place, onClose }: { place: Place; onClose: () =>
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('keydown', onKey);
-      cleanup.current?.();
-    };
+    return () => window.removeEventListener('keydown', onKey);
   }, [onClose]);
-
-  const startSensor = useCallback(async () => {
-    const DOE = (window as unknown as { DeviceOrientationEvent?: { requestPermission?: () => Promise<string> } }).DeviceOrientationEvent;
-    if (!DOE) {
-      setSensor('unsupported');
-      return;
-    }
-    // iOS (Safari) verlangt eine ausdrückliche Erlaubnis nach Nutzeraktion
-    if (typeof DOE.requestPermission === 'function') {
-      try {
-        if ((await DOE.requestPermission()) !== 'granted') {
-          setSensor('denied');
-          return;
-        }
-      } catch {
-        setSensor('denied');
-        return;
-      }
-    }
-    const handler = (ev: Event) => {
-      const e = ev as OrientationEventWithCompass;
-      let h: number | null = null;
-      if (typeof e.webkitCompassHeading === 'number' && !Number.isNaN(e.webkitCompassHeading)) h = e.webkitCompassHeading; // iOS
-      else if (e.absolute && e.alpha !== null) h = (360 - e.alpha) % 360; // Android (absolute Ausrichtung)
-      if (h === null) return;
-      headingRef.current = smoothAngle(headingRef.current, h);
-      setHeading(headingRef.current);
-      setSensor('active');
-    };
-    const evName = 'ondeviceorientationabsolute' in window ? 'deviceorientationabsolute' : 'deviceorientation';
-    window.addEventListener(evName, handler);
-    cleanup.current = () => window.removeEventListener(evName, handler);
-    setSensor('no-data');
-    // Kommt nach 3 s nichts Brauchbares, gibt es keinen Kompass
-    setTimeout(() => setSensor((s) => (s === 'no-data' ? 'unsupported' : s)), 3000);
-  }, []);
 
   const objects = skyPositions(place.lat, place.lon, validElevation(place.elevation) ?? 0, now);
   const shown = objects.filter((o) => o.id === 'gc' || o.id === 'moon' || o.id === 'sun' || (o.alt > 0 && (o.magnitude ?? 99) < 3));

@@ -43,6 +43,14 @@ export function MoonCard({ night, tz }: CardProps) {
       <dl className="kv">
         <dt>Mondfreie Dunkelheit</dt>
         <dd>{m.moonFreeDark.length ? m.moonFreeDark.map((i) => `${fmtTime(i.start, tz)}–${fmtTime(i.end, tz)}`).join(', ') : '–'}</dd>
+        {(m.terrainRise || m.terrainSet) && (
+          <>
+            <dt>⛰️ Über Gelände</dt>
+            <dd>{fmtTimeDay(m.terrainRise, tz)}</dd>
+            <dt>⛰️ Hinter Gelände</dt>
+            <dd>{fmtTimeDay(m.terrainSet, tz)}</dd>
+          </>
+        )}
         <dt>Stand um Mitternacht</dt>
         <dd>
           {fmtDeg(m.midnightAlt)} Höhe, {compass(m.midnightAz)}

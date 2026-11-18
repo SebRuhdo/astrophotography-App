@@ -34,6 +34,15 @@ export function SunCard({ night, tz }: CardProps) {
         <dd>{fmtTime(s.sunrise, tz)}</dd>
         <dt>Goldene Stunde (morgens)</dt>
         <dd>{iv(s.goldenMorning)}</dd>
+        {(s.terrainSet || s.terrainRise) && (
+          <>
+            <div className="sep" />
+            <dt>⛰️ Hinter Gelände (abends)</dt>
+            <dd>{fmtTime(s.terrainSet, tz)}</dd>
+            <dt>⛰️ Über Gelände (morgens)</dt>
+            <dd>{fmtTime(s.terrainRise, tz)}</dd>
+          </>
+        )}
         <div className="sep" />
         <dt>Tiefster Sonnenstand</dt>
         <dd>{s.minAltitude.toFixed(1)}°</dd>

@@ -54,9 +54,10 @@ const avgQ = (r: Q[]) => r.reduce((a, x) => a + x.q, 0) / r.length;
  * Sucht den längsten zusammenhängenden Zeitraum in der Dunkelphase mit guter Qualität.
  * Qualität je 5-min-Schritt = Stundenqualität (1 − Bewölkung [× Deep-Sky-Faktor]) × Mondfaktor,
  * Mondfaktor = 1 − 0,7 × Beleuchtung (wenn Mond über Horizont).
+  * (MS-Kern-Sichtbarkeit kommt aus den Samples, inkl. Mindesthöhe und Horizont-Profil; _minAlt bleibt aus Kompatibilität.)
  * „gut“ ab 1 − Wolken-Grenze „gut“ (Standard 0,8), „mittel“ ab 1 − Wolken-Grenze „schlecht“ (Standard 0,4).
  */
-export function findBestWindow(night: NightAstro, weather: WeatherData | null, minAlt: number, o: RatingOptions = DEFAULT_RATING): BestWindow {
+export function findBestWindow(night: NightAstro, weather: WeatherData | null, _minAlt: number, o: RatingOptions = DEFAULT_RATING): BestWindow {
   const GOOD = 1 - o.thresholds.cloudGood / 100;
   const OK = 1 - o.thresholds.cloudBad / 100;
   const dark = night.sun.dark;
@@ -98,7 +99,7 @@ export function findBestWindow(night: NightAstro, weather: WeatherData | null, m
 
   const clouds = run.filter((x) => x.cloud !== null).map((x) => x.cloud as number);
   let mw: BestWindow['mw'] = null;
-  for (const x of run) if (x.s.gcAlt >= minAlt && (!mw || x.s.gcAlt > mw.alt)) mw = { time: x.s.t, alt: x.s.gcAlt, az: x.s.gcAz };
+  for (const x of run) if (x.s.gcVis && (!mw || x.s.gcAlt > mw.alt)) mw = { time: x.s.t, alt: x.s.gcAlt, az: x.s.gcAz };
 
   return {
     level,

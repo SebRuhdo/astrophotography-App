@@ -3,6 +3,7 @@ import { Card, ScoreChip, cloudStyle, fmtNum } from '../components/ui';
 import { BestWindowBanner } from '../components/BestWindowBanner';
 import { computeNight } from '../lib/astro';
 import { findBestWindow } from '../lib/bestWindow';
+import { makeHorizon } from '../lib/horizon';
 import { validElevation } from '../lib/geocode';
 import { scoreNight } from '../lib/score';
 import type { Place } from '../lib/settings';
@@ -19,6 +20,7 @@ export function SpotsCard({ place, favorites, night, minAlt, selectPlace, rating
     return list;
   }, [favorites, place]);
   const key = spots.map((s) => `${s.id}:${s.lat.toFixed(3)},${s.lon.toFixed(3)}`).join('|');
+  const hzKey = spots.map((s) => `${s.horizon?.terrainAt ?? 0}:${s.horizon?.manual.length ?? 0}`).join('|');
   const [wx, setWx] = useState<Record<string, WxState>>({});
 
   // Wetter nacheinander laden (nutzt den Zwischenspeicher, schont das API-Kontingent)
@@ -49,13 +51,14 @@ export function SpotsCard({ place, favorites, night, minAlt, selectPlace, rating
           const n = computeNight(s.lat, s.lon, validElevation(s.elevation) ?? 0, localNoon(night.dateIso, tz), night.dateIso, {
             minAltitude: minAlt,
             planets: false,
+            horizon: makeHorizon(s.horizon),
           });
           const w = wx[s.id];
           return { s, tz, n, w, score: scoreNight(n, w?.data ?? null, rating), best: findBestWindow(n, w?.data ?? null, minAlt, rating) };
         })
         .sort((a, b) => (b.score.score ?? -1) - (a.score.score ?? -1)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [key, night.dateIso, minAlt, wx, rating],
+    [key, hzKey, night.dateIso, minAlt, wx, rating],
   );
 
   return (

@@ -3,6 +3,7 @@ import type { NightScore } from '../lib/score';
 import type { BestWindow } from '../lib/bestWindow';
 import type { Place } from '../lib/settings';
 import type { Profile, RatingOptions } from '../lib/rating';
+import type { HorizonFn } from '../lib/horizon';
 import type { WeatherData } from '../lib/weather';
 
 export interface ForecastNight {
@@ -30,4 +31,5 @@ export interface CardProps {
   selectPlace: (p: Place) => void;
   rating: RatingOptions;
   setProfile: (p: Profile) => void;
+  horizon?: HorizonFn;
 }

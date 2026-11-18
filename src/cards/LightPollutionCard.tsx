@@ -19,7 +19,7 @@ const BORTLE: Record<number, string> = {
 
 const COLORS = { gc: '#b9a2ff', moon: '#e8e3c9', sun: '#ffb347' };
 
-export function LightPollutionCard({ place, night, tz, minAlt, pickLocation, updatePlace }: CardProps) {
+export function LightPollutionCard({ place, night, tz, pickLocation, updatePlace }: CardProps) {
   const [overlay, setOverlay] = useState(true);
   const [opacity, setOpacity] = useState(0.7);
   const [showRays, setShowRays] = useState(true);
@@ -45,7 +45,7 @@ export function LightPollutionCard({ place, night, tz, minAlt, pickLocation, upd
 
   const rays: Ray[] = [];
   if (cur && showRays) {
-    if (cur.gcAlt > -5) rays.push({ id: 'gc', label: `MS-Kern ${Math.round(cur.gcAlt)}°`, color: COLORS.gc, az: cur.gcAz, dashed: cur.gcAlt < minAlt });
+    if (cur.gcAlt > -5) rays.push({ id: 'gc', label: `MS-Kern ${Math.round(cur.gcAlt)}°`, color: COLORS.gc, az: cur.gcAz, dashed: !cur.gcVis });
     if (cur.moonAlt > -5) rays.push({ id: 'moon', label: `Mond ${Math.round(cur.moonAlt)}°`, color: COLORS.moon, az: cur.moonAz, dashed: cur.moonAlt < 0 });
     if (cur.sunAlt > -18) rays.push({ id: 'sun', label: `Sonne ${Math.round(cur.sunAlt)}°`, color: COLORS.sun, az: cur.sunAz, dashed: cur.sunAlt < 0 });
   }

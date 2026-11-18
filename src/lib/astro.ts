@@ -1,4 +1,5 @@
 import * as A from 'astronomy-engine';
+import type { HorizonFn } from './horizon';
 
 // ---------------------------------------------------------------------------
 // Konstanten
@@ -41,6 +42,8 @@ export interface Sample {
   moonAz: number;
   gcAlt: number;
   gcAz: number;
+  /** MS-Kern über Mindesthöhe und über dem Horizont-Profil */
+  gcVis: boolean;
 }
 
 export interface SunInfo {
@@ -56,6 +59,9 @@ export interface SunInfo {
   minAltitude: number;
   dark: Interval | null; // dunkelster verfügbarer Zeitraum
   darkType: DarkType;
+  /** Nur mit Horizont-Profil: Sonne verschwindet hinter dem Gelände / kommt hervor */
+  terrainSet: Date | null;
+  terrainRise: Date | null;
 }
 
 export interface MoonInfo {
@@ -71,6 +77,9 @@ export interface MoonInfo {
   nextFull: Date | null;
   midnightAlt: number;
   midnightAz: number;
+  /** Nur mit Horizont-Profil: Mond kommt über das Gelände / verschwindet dahinter */
+  terrainRise: Date | null;
+  terrainSet: Date | null;
 }
 
 export interface PlanetInfo {
@@ -117,6 +126,8 @@ export interface ComputeOptions {
   /** Mindesthöhe in Grad, ab der ein Objekt als „sichtbar“ gilt (Horizont-Hindernisse) */
   minAltitude?: number;
   planets?: boolean;
+  /** Horizont-Profil des Standorts (Höhe in Grad je Azimut) */
+  horizon?: HorizonFn;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,6 +227,20 @@ export function compass(az: number | null | undefined): string {
   return COMPASS[Math.round((((az % 360) + 360) % 360) / 22.5) % 16];
 }
 
+/** Zeitpunkte, an denen alt − Horizont(az) das Vorzeichen wechselt (linear interpoliert). */
+function terrainCrossings(samples: Sample[], alt: (s: Sample) => number, az: (s: Sample) => number, hz: HorizonFn) {
+  const f = samples.map((s) => alt(s) - hz(az(s)));
+  const up: Date[] = [];
+  const down: Date[] = [];
+  for (let i = 1; i < f.length; i++) {
+    if ((f[i - 1] < 0) === (f[i] < 0)) continue;
+    const k = f[i - 1] / (f[i - 1] - f[i]);
+    const t = new Date(samples[i - 1].t.getTime() + k * (samples[i].t.getTime() - samples[i - 1].t.getTime()));
+    (f[i] >= 0 ? up : down).push(t);
+  }
+  return { up, down };
+}
+
 function sampleNight(obs: A.Observer, t0: Date): Sample[] {
   const n = Math.round(1440 / STEP_MIN);
   const samples: Sample[] = [];
@@ -224,7 +249,7 @@ function sampleNight(obs: A.Observer, t0: Date): Sample[] {
     const sun = altAz(A.Body.Sun, t, obs);
     const moon = altAz(A.Body.Moon, t, obs);
     const gc = altAz(A.Body.Star1, t, obs);
-    samples.push({ t, sunAlt: sun.alt, sunAz: sun.az, moonAlt: moon.alt, moonAz: moon.az, gcAlt: gc.alt, gcAz: gc.az });
+    samples.push({ t, sunAlt: sun.alt, sunAz: sun.az, moonAlt: moon.alt, moonAz: moon.az, gcAlt: gc.alt, gcAz: gc.az, gcVis: false });
   }
   return samples;
 }
@@ -245,6 +270,9 @@ export function computeNight(
   const obs = new A.Observer(lat, lon, elevation);
   const t1 = new Date(t0.getTime() + DAY_MS);
   const samples = sampleNight(obs, t0);
+  const hz = opts.horizon;
+  const limit = (az: number) => (hz ? Math.max(minAlt, hz(az)) : minAlt);
+  for (const s of samples) s.gcVis = s.gcAlt >= limit(s.gcAz);
 
   // ---- Sonne -------------------------------------------------------------
   const civil = sunBelow(obs, t0, t1, samples, -6);
@@ -273,7 +301,14 @@ export function computeNight(
     minAltitude,
     dark,
     darkType,
+    terrainSet: null,
+    terrainRise: null,
   };
+  if (hz) {
+    const c = terrainCrossings(samples, (x) => x.sunAlt, (x) => x.sunAz, hz);
+    sun.terrainSet = c.down[0] ?? null;
+    sun.terrainRise = c.up[c.up.length - 1] ?? null;
+  }
 
   // ---- Mond --------------------------------------------------------------
   const midT = dark ? new Date((dark.start.getTime() + dark.end.getTime()) / 2) : new Date(t0.getTime() + DAY_MS / 2);
@@ -296,14 +331,21 @@ export function computeNight(
     nextFull: toDate(A.SearchMoonPhase(180, t0, 35)),
     midnightAlt: midnight.alt,
     midnightAz: midnight.az,
+    terrainRise: null,
+    terrainSet: null,
   };
+  if (hz) {
+    const c = terrainCrossings(samples, (x) => x.moonAlt, (x) => x.moonAz, hz);
+    moon.terrainRise = c.up[0] ?? null;
+    moon.terrainSet = c.down[0] ?? null;
+  }
 
   // ---- Milchstraße (galaktisches Zentrum) ---------------------------------
   const inDark = (t: Date) => !!dark && t >= dark.start && t <= dark.end;
-  const mwVisible = intervalsWhere(samples, (s) => inDark(s.t) && s.gcAlt >= minAlt);
-  const mwMoonFree = intervalsWhere(samples, (s) => inDark(s.t) && s.gcAlt >= minAlt && s.moonAlt <= 0);
+  const mwVisible = intervalsWhere(samples, (s) => inDark(s.t) && s.gcVis);
+  const mwMoonFree = intervalsWhere(samples, (s) => inDark(s.t) && s.gcVis && s.moonAlt <= 0);
   let best: Sample | null = null;
-  for (const s of samples) if (inDark(s.t) && s.gcAlt >= minAlt && (!best || s.gcAlt > best.gcAlt)) best = s;
+  for (const s of samples) if (inDark(s.t) && s.gcVis && (!best || s.gcAlt > best.gcAlt)) best = s;
   const sampleAt = (t: Date | undefined) => (t ? samples.find((s) => s.t.getTime() === t.getTime()) ?? null : null);
   const milkyWay: MilkyWayInfo = {
     visible: mwVisible,
@@ -329,9 +371,9 @@ export function computeNight(
         const h = altAz(p.body, s.t, obs);
         ps.push({ t: s.t, alt: h.alt, az: h.az, sunAlt: s.sunAlt });
       }
-      const visible = intervalsWhere(ps, (s) => s.sunAlt < -6 && s.alt >= minAlt);
+      const visible = intervalsWhere(ps, (s) => s.sunAlt < -6 && s.alt >= limit(s.az));
       let pb: (typeof ps)[number] | null = null;
-      for (const s of ps) if (s.sunAlt < -6 && s.alt >= minAlt && (!pb || s.alt > pb.alt)) pb = s;
+      for (const s of ps) if (s.sunAlt < -6 && s.alt >= limit(s.az) && (!pb || s.alt > pb.alt)) pb = s;
       const transit = A.SearchHourAngle(p.body, obs, 0, t0, +1);
       let magnitude: number | null = null;
       let constellation: string | null = null;
@@ -366,14 +408,16 @@ export function computeNight(
  * Sucht ab `t0` die nächste Nacht, in der der Kern der Milchstraße bei astronomischer
  * Dunkelheit über `minAlt` steht. Grobe Suche (30-min-Raster), max. 400 Tage.
  */
-export function nextMilkyWayNight(lat: number, lon: number, elevation: number, t0: Date, minAlt = 5): Date | null {
+export function nextMilkyWayNight(lat: number, lon: number, elevation: number, t0: Date, minAlt = 5, horizon?: HorizonFn): Date | null {
   const obs = new A.Observer(lat, lon, elevation);
   const stepMs = 30 * 60000;
   for (let d = 1; d <= 400; d++) {
     const base = t0.getTime() + d * DAY_MS;
     for (let k = 0; k < 48; k++) {
       const t = new Date(base + k * stepMs);
-      if (altAz(A.Body.Sun, t, obs).alt < -18 && altAz(A.Body.Star1, t, obs).alt >= minAlt) return new Date(base);
+      if (altAz(A.Body.Sun, t, obs).alt >= -18) continue;
+      const gc = altAz(A.Body.Star1, t, obs);
+      if (gc.alt >= Math.max(minAlt, horizon ? horizon(gc.az) : 0)) return new Date(base);
     }
   }
   return null;

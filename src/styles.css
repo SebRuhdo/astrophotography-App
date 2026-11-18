@@ -883,3 +883,37 @@ table.moon-cal td.selected {
   grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
   gap: 0 10px;
 }
+
+/* ------------------------------------------------------------------ Horizont */
+.hz-chart {
+  display: block;
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+.hz-chart .wx-axis {
+  fill: var(--faint);
+  font-size: 11px;
+}
+.capture-live {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  text-align: center;
+  margin: 8px 0 12px;
+}
+.capture-live > div {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.capture-value {
+  font-size: 1.8rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.capture-btn {
+  width: 100%;
+  min-height: 52px;
+  font-size: 1.1rem;
+}
