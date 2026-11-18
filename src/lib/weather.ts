@@ -1,3 +1,5 @@
+import { friendlyApiError } from './apiErrors';
+
 // Wetterdaten von Open-Meteo (https://open-meteo.com, CC BY 4.0, kostenlos für nicht-kommerzielle Nutzung)
 
 export interface WeatherHour {
@@ -122,7 +124,7 @@ export async function fetchWeather(lat: number, lon: number, signal?: AbortSigna
     } catch {
       /* ignorieren */
     }
-    return fallback(reason);
+    return fallback(friendlyApiError(reason, 'Wetter').message);
   }
   const raw = (await res.json()) as Raw;
   try {
