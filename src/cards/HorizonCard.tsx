@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from 'react';
 import { Card, Stat, fmtDeg } from '../components/ui';
 import { HorizonCaptureDialog } from '../components/HorizonCaptureDialog';
 import { compass, intervalMs, type Sample } from '../lib/astro';
-import { computeTerrainHorizon, makeHorizon, type HorizonProfile, type ManualPoint } from '../lib/horizon';
+import { computeTerrainHorizon, makeHorizon, type HorizonProfile, type ManualPoint, type TerrainProgress } from '../lib/horizon';
 import { validElevation } from '../lib/geocode';
 import { fmtDuration, fmtTime } from '../lib/time';
 import type { CardProps } from './types';
@@ -40,7 +40,7 @@ function track(samples: Sample[], alt: (s: Sample) => number, az: (s: Sample) =>
 export function HorizonCard({ place, night, tz, minAlt, updatePlace }: CardProps) {
   const profile: HorizonProfile | undefined = place.horizon;
   const hz = useMemo(() => makeHorizon(profile), [profile]);
-  const [busy, setBusy] = useState<{ done: number; total: number } | null>(null);
+  const [busy, setBusy] = useState<TerrainProgress | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [capture, setCapture] = useState(false);
   const [selAz, setSelAz] = useState<number | null>(null);
@@ -64,7 +64,7 @@ export function HorizonCard({ place, night, tz, minAlt, updatePlace }: CardProps
     setError(null);
     setBusy({ done: 0, total: 1 });
     try {
-      const { terrain, groundElevation } = await computeTerrainHorizon(place.lat, place.lon, undefined, (done, total) => setBusy({ done, total }), ac.signal);
+      const { terrain, groundElevation } = await computeTerrainHorizon(place.lat, place.lon, undefined, setBusy, ac.signal);
       const patch: Partial<typeof place> = { horizon: { terrain, terrainAt: Date.now(), manual: profile?.manual ?? [] } };
       if (validElevation(place.elevation) === null && validElevation(groundElevation) !== null) patch.elevation = groundElevation;
       updatePlace(patch);
@@ -115,7 +115,13 @@ export function HorizonCard({ place, night, tz, minAlt, updatePlace }: CardProps
 
       <div className="row" style={{ marginBottom: 10 }}>
         <button className="btn primary small" onClick={computeTerrain} disabled={!!busy}>
-          {busy ? `Lade Gelände … ${Math.round((busy.done / busy.total) * 100)} %` : profile?.terrain ? '⛰️ Gelände neu berechnen' : '⛰️ Gelände berechnen'}
+          {busy
+            ? busy.waitSec
+              ? `API-Limit – weiter in ${busy.waitSec} s …`
+              : `Lade Gelände … ${Math.round((busy.done / busy.total) * 100)} %`
+            : profile?.terrain
+              ? '⛰️ Gelände neu berechnen'
+              : '⛰️ Gelände berechnen'}
         </button>
         <button className="btn small" onClick={() => setCapture(true)}>
           📱 Vor Ort erfassen
@@ -131,6 +137,9 @@ export function HorizonCard({ place, night, tz, minAlt, updatePlace }: CardProps
           </button>
         )}
       </div>
+      {busy?.waitSec ? (
+        <div className="alert info">Die kostenlose Geländedaten-API erlaubt nur eine begrenzte Zahl Abfragen pro Minute. Die Berechnung läuft automatisch weiter.</div>
+      ) : null}
       {error && <div className="alert error">{error}</div>}
 
       <div ref={wrap}>
@@ -230,7 +239,7 @@ export function HorizonCard({ place, night, tz, minAlt, updatePlace }: CardProps
 
       <p className="tiny faint">
         {profile?.terrainAt && `Gelände berechnet am ${new Date(profile.terrainAt).toLocaleDateString('de-DE')} · `}
-        Gelände aus dem Copernicus-Höhenmodell GLO-90 (90-m-Raster, Copernicus-Programm der EU/ESA, über Open-Meteo), bis 40 km Entfernung, inkl. Erdkrümmung. Bäume
+        Gelände aus dem Copernicus-Höhenmodell GLO-90 (90-m-Raster, Copernicus-Programm der EU/ESA, über Open-Meteo), alle 10° bis 33 km Entfernung, inkl. Erdkrümmung; Genauigkeit typisch ±1° (ca. 580 Abfragen je Berechnung, Limit der kostenlosen API: 600/min, 5000/h). Bäume
         und Gebäude sind darin nicht enthalten – dafür „Vor Ort erfassen“. Tippe ins Panorama, um die Horizonthöhe einer Richtung abzulesen. Das Profil gehört zum
         Spot „{place.name}“ und wird bei Lieblingsorten mitgespeichert.
       </p>

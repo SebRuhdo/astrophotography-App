@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { computeTerrainHorizon, destination, elevationAngle, makeHorizon, TERRAIN_DIRS, type ElevationFetcher } from './horizon';
+import { computeTerrainHorizon, destination, elevationAngle, makeHorizon, TERRAIN_DIRS, TERRAIN_STEP, TOTAL_POINTS, type ElevationFetcher } from './horizon';
+import { ApiLimitError, friendlyApiError } from './apiErrors';
 import { computeNight } from './astro';
 import { localNoon } from './time';
 
@@ -35,13 +36,27 @@ describe('computeTerrainHorizon (simuliertes Gelände)', () => {
       return 500 + Math.max(0, 1500 * (1 - d / 3000)); // 2000 m Gipfel, Radius 3 km, Tal 500 m
     });
 
+  it('breiter Bergrücken wird genau getroffen', async () => {
+    // Rücken 6–14 km östlich, 1800 m über dem Tal
+    const ridge: ElevationFetcher = async (pts) =>
+      pts.map((p) => {
+        const d = dist(p, [lat, lon]);
+        const east = p[1] > lon && Math.abs(p[0] - lat) < 0.05;
+        return 500 + (east && d > 6000 && d < 14000 ? 1800 * (1 - Math.abs(d - 10000) / 4000) : 0);
+      });
+    const { terrain } = await computeTerrainHorizon(lat, lon, ridge);
+    const exact = Math.max(...Array.from({ length: 801 }, (_, i) => elevationAngle(501.7, 500 + 1800 * (1 - Math.abs(6000 + i * 10 - 10000) / 4000), 6000 + i * 10)));
+    // spitzer (dreieckiger) Grat ist der ungünstigste Fall; typische Abweichung < 1°
+    expect(Math.abs(terrain[90 / TERRAIN_STEP] - exact)).toBeLessThan(1);
+  });
+
   it('Berg im Osten, freie Sicht im Westen', async () => {
     const { terrain, groundElevation } = await computeTerrainHorizon(lat, lon, fetcher);
     expect(terrain).toHaveLength(TERRAIN_DIRS);
     expect(groundElevation).toBeCloseTo(500, 0);
-    const east = terrain[90 / 5];
-    const west = terrain[270 / 5];
-    expect(east).toBeGreaterThan(7.5); // ≈ atan(1500/10000) ≈ 8,5°
+    const east = terrain[90 / TERRAIN_STEP];
+    const west = terrain[270 / TERRAIN_STEP];
+    expect(east).toBeGreaterThan(7); // Gipfel ≈ atan(1500/10000) ≈ 8,5°; Feinabtastung trifft ihn bis auf ~1°
     expect(east).toBeLessThan(9);
     expect(west).toBeLessThan(0.1);
   });
@@ -53,10 +68,10 @@ describe('makeHorizon', () => {
     expect(makeHorizon({ terrain: null, manual: [] })).toBeUndefined();
   });
   it('Gelände wird interpoliert, manuelle Punkte heben an', () => {
-    const terrain = Array.from({ length: TERRAIN_DIRS }, (_, i) => (i === 18 ? 10 : 0)); // 90° = 10°
+    const terrain = Array.from({ length: TERRAIN_DIRS }, (_, i) => (i * TERRAIN_STEP === 90 ? 10 : 0)); // 90° = 10°
     const hz = makeHorizon({ terrain, manual: [{ az: 200, alt: 15, at: 0 }, { az: 210, alt: 12, at: 0 }] })!;
     expect(hz(90)).toBeCloseTo(10);
-    expect(hz(92.5)).toBeCloseTo(5);
+    expect(hz(90 + TERRAIN_STEP / 2)).toBeCloseTo(5);
     expect(hz(205)).toBeCloseTo(13.5); // zwischen zwei manuellen Punkten
     expect(hz(300)).toBeCloseTo(0);
     expect(hz(201)).toBeGreaterThan(14);
@@ -89,5 +104,38 @@ describe('computeNight mit Horizont', () => {
     const diffMin = (n.sun.sunset!.getTime() - n.sun.terrainSet!.getTime()) / 60000;
     expect(diffMin).toBeGreaterThan(20); // 5° ≈ 30–45 min im Sommer
     expect(diffMin).toBeLessThan(70);
+  });
+});
+
+describe('API-Limits', () => {
+  it('höchstens 600 Punkte je Berechnung (Minutenlimit der kostenlosen API)', () => {
+    expect(TOTAL_POINTS).toBeLessThanOrEqual(600);
+  });
+  it('englische Meldungen werden übersetzt', () => {
+    const e = friendlyApiError('Minutely API request limit exceeded. Please try again in one minute.', 'Geländedaten');
+    expect(e).toBeInstanceOf(ApiLimitError);
+    expect((e as ApiLimitError).kind).toBe('minute');
+    expect(e.message).toMatch(/Minutenlimit/);
+    expect((friendlyApiError('Daily API request limit exceeded.') as ApiLimitError).kind).toBe('day');
+  });
+  it('bei Minutenlimit wird gewartet und weitergerechnet', async () => {
+    let calls = 0;
+    const fetcher: ElevationFetcher = async (pts) => {
+      calls++;
+      if (calls === 3) throw friendlyApiError('Minutely API request limit exceeded.', 'Geländedaten');
+      return pts.map(() => 500);
+    };
+    const waits: number[] = [];
+    const res = await computeTerrainHorizon(47, 11, fetcher, (p) => p.waitSec && waits.push(p.waitSec), undefined, async () => {});
+    expect(res.terrain).toHaveLength(TERRAIN_DIRS);
+    expect(waits[0]).toBe(65);
+    expect(res.groundElevation).toBe(500);
+    expect(calls).toBeGreaterThan(Math.ceil(TOTAL_POINTS / 100));
+  });
+  it('Tageslimit bricht mit verständlicher Meldung ab', async () => {
+    const fetcher: ElevationFetcher = async () => {
+      throw friendlyApiError('Daily API request limit exceeded.', 'Geländedaten');
+    };
+    await expect(computeTerrainHorizon(47, 11, fetcher, undefined, undefined, async () => {})).rejects.toThrow(/Tageslimit/);
   });
 });

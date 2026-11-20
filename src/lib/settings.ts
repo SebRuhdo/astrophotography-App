@@ -87,7 +87,7 @@ function load(): Settings {
     // gespeicherte Orte bereinigen (z. B. Höhe −9999 aus früheren Versionen)
     const fixHorizon = (h: HorizonProfile | undefined): HorizonProfile | undefined => {
       if (!h) return undefined;
-      const terrain = Array.isArray(h.terrain) && h.terrain.length === TERRAIN_DIRS && h.terrain.every(Number.isFinite) ? h.terrain : null;
+      const terrain = Array.isArray(h.terrain) && (h.terrain.length === TERRAIN_DIRS || h.terrain.length === 72) && h.terrain.every(Number.isFinite) ? h.terrain : null;
       const manual = Array.isArray(h.manual) ? h.manual.filter((m) => Number.isFinite(m?.az) && Number.isFinite(m?.alt)) : [];
       return terrain || manual.length ? { ...h, terrain, manual } : undefined;
     };

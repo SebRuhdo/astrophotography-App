@@ -1,21 +1,22 @@
+import { ApiLimitError, friendlyApiError } from './apiErrors';
+
 // Horizont-Profil: Gelände (Copernicus DEM GLO-90 über die Open-Meteo Elevation API) + vor Ort erfasste Punkte.
 
-export const TERRAIN_STEP = 5; // Grad je Richtung → 72 Richtungen
+// Die kostenlose Open-Meteo-API zählt jeden Koordinatenpunkt als Aufruf (Limit 600/min, 5000/h, 10 000/Tag je IP).
+// Daher dreistufig: 36 Richtungen × 9 Entfernungen (grob), dann je 4 und 3 Punkte rund um den jeweils
+// höchsten Fund (fein) + Standort = 577 Punkte. Zwischen den Richtungen wird interpoliert.
+export const TERRAIN_STEP = 10; // Grad je Richtung → 36 Richtungen
 export const TERRAIN_DIRS = 360 / TERRAIN_STEP;
 const EARTH_R = 6371000; // m
 const REFRACTION_K = 0.13; // übliche terrestrische Refraktion
 const EYE_HEIGHT = 1.7; // m über Gelände
 
-/** Abstände der Abtastpunkte je Richtung (m): dicht in der Nähe, weiter entfernt gröber, bis 40 km. */
-export const SAMPLE_DISTANCES: number[] = (() => {
-  const out: number[] = [];
-  let d = 150;
-  while (d <= 40000) {
-    out.push(Math.round(d));
-    d *= 1.3;
-  }
-  return out;
-})();
+/** Grobe Abstände der Abtastpunkte je Richtung (m), bis 34 km. */
+export const SAMPLE_DISTANCES: number[] = [300, 800, 1600, 3000, 5000, 8000, 12500, 20000, 33000];
+/** Verfeinerungsstufen: zusätzliche Punkte je Richtung rund um den bisher höchsten Fund. */
+export const REFINE_STAGES = [4, 3];
+/** Gesamtzahl der Abfragepunkte je Berechnung. */
+export const TOTAL_POINTS = 1 + TERRAIN_DIRS * (SAMPLE_DISTANCES.length + REFINE_STAGES.reduce((a, b) => a + b, 0));
 
 export interface ManualPoint {
   az: number; // Grad
@@ -71,13 +72,29 @@ export const fetchElevations: ElevationFetcher = async (points, signal) => {
       } catch {
         /* ignorieren */
       }
-      throw new Error(`Geländedaten: ${reason}`);
+      throw friendlyApiError(reason, 'Geländedaten');
     }
     const j = (await res.json()) as { elevation: number[] };
     out.push(...j.elevation);
   }
   return out;
 };
+
+export interface TerrainProgress {
+  done: number;
+  total: number;
+  /** > 0: Wartezeit in Sekunden wegen Minutenlimit */
+  waitSec?: number;
+}
+
+const defaultSleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve, reject) => {
+    const id = setTimeout(resolve, ms);
+    signal?.addEventListener('abort', () => {
+      clearTimeout(id);
+      reject(new DOMException('Abgebrochen', 'AbortError'));
+    });
+  });
 
 /**
  * Berechnet das Gelände-Horizontprofil: je Richtung der größte Höhenwinkel über alle Abtastpunkte.
@@ -87,39 +104,74 @@ export async function computeTerrainHorizon(
   lat: number,
   lon: number,
   fetcher: ElevationFetcher = fetchElevations,
-  onProgress?: (done: number, total: number) => void,
+  onProgress?: (p: TerrainProgress) => void,
   signal?: AbortSignal,
+  sleep: (ms: number, signal?: AbortSignal) => Promise<void> = defaultSleep,
 ): Promise<{ terrain: number[]; groundElevation: number }> {
-  const points: [number, number][] = [[lat, lon]];
-  for (let i = 0; i < TERRAIN_DIRS; i++) for (const d of SAMPLE_DISTANCES) points.push(destination(lat, lon, i * TERRAIN_STEP, d));
-
-  // in Blöcken abrufen, damit ein Fortschritt angezeigt werden kann
-  const elev: number[] = [];
-  const BLOCK = 400;
-  for (let i = 0; i < points.length; i += BLOCK) {
-    elev.push(...(await fetcher(points.slice(i, i + BLOCK), signal)));
-    onProgress?.(Math.min(points.length, i + BLOCK), points.length);
-  }
-  const ground = elev[0];
-  const hObs = ground + EYE_HEIGHT;
-  const terrain: number[] = [];
-  let k = 1;
-  for (let i = 0; i < TERRAIN_DIRS; i++) {
-    let best = -90;
-    for (const d of SAMPLE_DISTANCES) {
-      const h = elev[k++];
-      if (Number.isFinite(h) && h > -1000) best = Math.max(best, elevationAngle(hObs, h, d));
+  const total = TOTAL_POINTS;
+  let done = 0;
+  // Abruf in Blöcken zu 100; bei Minutenlimit warten und den Block wiederholen
+  const fetchAll = async (points: [number, number][]): Promise<number[]> => {
+    const out: number[] = [];
+    for (let i = 0; i < points.length; ) {
+      try {
+        out.push(...(await fetcher(points.slice(i, i + 100), signal)));
+        done += Math.min(100, points.length - i);
+        i += 100;
+        onProgress?.({ done, total });
+      } catch (e) {
+        if (!(e instanceof ApiLimitError) || e.kind !== 'minute' || signal?.aborted) throw e;
+        for (let sec = 65; sec > 0; sec--) {
+          onProgress?.({ done, total, waitSec: sec });
+          await sleep(1000, signal);
+        }
+      }
     }
-    terrain.push(Math.round(best * 10) / 10);
+    return out;
+  };
+
+  // Stufe 1: grob
+  const coarsePts: [number, number][] = [[lat, lon]];
+  for (let i = 0; i < TERRAIN_DIRS; i++) for (const d of SAMPLE_DISTANCES) coarsePts.push(destination(lat, lon, i * TERRAIN_STEP, d));
+  const coarse = await fetchAll(coarsePts);
+  const ground = coarse[0];
+  const hObs = ground + EYE_HEIGHT;
+  const angle = (h: number, d: number) => (Number.isFinite(h) && h > -1000 ? elevationAngle(hObs, h, d) : -90);
+
+  // je Richtung: abgetastete (Entfernung, Winkel)-Paare, nach Entfernung sortiert
+  const n = SAMPLE_DISTANCES.length;
+  const prof: { d: number; a: number }[][] = Array.from({ length: TERRAIN_DIRS }, (_, i) =>
+    SAMPLE_DISTANCES.map((d, j) => ({ d, a: angle(coarse[1 + i * n + j], d) })),
+  );
+
+  // Stufen 2+: rund um den bisher höchsten Fund zwischen dessen Nachbarn verdichten
+  for (const m of REFINE_STAGES) {
+    const ds: number[][] = prof.map((p) => {
+      let k = 0;
+      p.forEach((x, j) => x.a > p[k].a && (k = j));
+      const lo = k > 0 ? p[k - 1].d : p[0].d * 0.4;
+      const hi = k < p.length - 1 ? p[k + 1].d : p[k].d * 1.3;
+      return Array.from({ length: m }, (_, j) => lo + ((hi - lo) * (j + 1)) / (m + 1));
+    });
+    const pts: [number, number][] = [];
+    ds.forEach((list, i) => list.forEach((d) => pts.push(destination(lat, lon, i * TERRAIN_STEP, d))));
+    const el = await fetchAll(pts);
+    ds.forEach((list, i) => {
+      list.forEach((d, j) => prof[i].push({ d, a: angle(el[i * m + j], d) }));
+      prof[i].sort((x, y) => x.d - y.d);
+    });
   }
+
+  const terrain = prof.map((p) => Math.round(Math.max(...p.map((x) => x.a)) * 10) / 10);
   return { terrain, groundElevation: ground };
 }
 
 /** Horizonthöhe aus dem Geländeprofil (linear zwischen den 5°-Richtungen). */
 function terrainAt(terrain: number[], az: number): number {
-  const a = norm(az) / TERRAIN_STEP;
-  const i = Math.floor(a) % TERRAIN_DIRS;
-  const j = (i + 1) % TERRAIN_DIRS;
+  const n = terrain.length;
+  const a = norm(az) / (360 / n);
+  const i = Math.floor(a) % n;
+  const j = (i + 1) % n;
   const f = a - Math.floor(a);
   return terrain[i] * (1 - f) + terrain[j] * f;
 }
